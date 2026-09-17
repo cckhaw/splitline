@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
-import { EVENT_TYPES, DISTANCE_OPTIONS } from "@/lib/eventTypes";
+import { EVENT_TYPES, DISTANCE_OPTIONS, GOAL_TIME_OPTIONS } from "@/lib/eventTypes";
+import { buildProgressChartSvg } from "@/lib/progressChart";
+import { resolveTheme } from "@/lib/theme";
 
 function minEventDate() {
   const d = new Date();
@@ -47,9 +49,11 @@ export default function TrainingPlanPage() {
   const [eventName, setEventName] = useState("");
   const [eventDate, setEventDate] = useState("");
   const [targetDistance, setTargetDistance] = useState(DISTANCE_OPTIONS.running[0]);
+  const [goalTime, setGoalTime] = useState(GOAL_TIME_OPTIONS[DISTANCE_OPTIONS.running[0]][0]);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [changingEvent, setChangingEvent] = useState(false);
+  const [theme, setTheme] = useState("dark");
 
   useEffect(() => {
     fetch("/api/me").then((r) => r.json()).then((data) => {
@@ -60,9 +64,25 @@ export default function TrainingPlanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
+  useEffect(() => {
+    const readTheme = () => setTheme(document.documentElement.getAttribute("data-theme") || "dark");
+    readTheme();
+    // Keeps the chart's colors in sync if the theme is toggled while this page is open.
+    const observer = new MutationObserver(readTheme);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    return () => observer.disconnect();
+  }, []);
+
   function changeEventType(next) {
     setEventType(next);
-    setTargetDistance(DISTANCE_OPTIONS[next][0]);
+    const firstDistance = DISTANCE_OPTIONS[next][0];
+    setTargetDistance(firstDistance);
+    setGoalTime(GOAL_TIME_OPTIONS[firstDistance][0]);
+  }
+
+  function changeDistance(next) {
+    setTargetDistance(next);
+    setGoalTime(GOAL_TIME_OPTIONS[next][0]);
   }
 
   async function loadGoal() {
@@ -104,7 +124,7 @@ export default function TrainingPlanPage() {
       const res = await fetch("/api/event", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ eventType, eventName, eventDate, targetDistance }),
+        body: JSON.stringify({ eventType, eventName, eventDate, targetDistance, goalTime }),
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't save that event.");
@@ -156,8 +176,12 @@ export default function TrainingPlanPage() {
             <label>Event name</label>
             <input required value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g. City Marathon" />
             <label>Distance</label>
-            <select value={targetDistance} onChange={(e) => setTargetDistance(e.target.value)}>
+            <select value={targetDistance} onChange={(e) => changeDistance(e.target.value)}>
               {DISTANCE_OPTIONS[eventType].map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
+            <label>Goal finish time</label>
+            <select value={goalTime} onChange={(e) => setGoalTime(e.target.value)}>
+              {GOAL_TIME_OPTIONS[targetDistance].map((t) => <option key={t} value={t}>{t}</option>)}
             </select>
             <label>Event date</label>
             <input type="date" required min={minEventDate()} value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
@@ -180,7 +204,8 @@ export default function TrainingPlanPage() {
                 <h2 style={{ margin: 0 }}>{goal.eventName || EVENT_TYPES.find((t) => t.value === goal.eventType)?.label}</h2>
                 <div className="hint" style={{ marginTop: 6 }}>
                   {EVENT_TYPES.find((t) => t.value === goal.eventType)?.label}
-                  {goal.targetDistance ? ` · ${goal.targetDistance}` : ""} ·{" "}
+                  {goal.targetDistance ? ` · ${goal.targetDistance}` : ""}
+                  {goal.goalTime ? ` · Goal: ${goal.goalTime}` : ""} ·{" "}
                   {new Date(goal.eventDate).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}
                   {" · "}{goal.weeksUntilEvent ?? weeksAway(goal.eventDate)} weeks away
                 </div>
@@ -206,7 +231,19 @@ export default function TrainingPlanPage() {
               <>
                 <div className="hint" style={{ color: "var(--ink)", marginTop: 12 }}>{plan.overview}</div>
 
-                <h3 style={{ marginTop: 20 }}>Phases</h3>
+                <h3 style={{ marginTop: 20 }}>Training progress</h3>
+                <div
+                  className="progress-chart"
+                  dangerouslySetInnerHTML={{
+                    __html: buildProgressChartSvg(
+                      plan.phases,
+                      { bg: resolveTheme(theme).bg, ink: resolveTheme(theme).ink, inkDim: resolveTheme(theme).inkDim, accent: resolveTheme(theme).amber, line: resolveTheme(theme).line },
+                      { width: 900, height: 260 }
+                    ),
+                  }}
+                />
+
+                <h3>Phases</h3>
                 <div className="phase-list">
                   {plan.phases.map((p, i) => (
                     <div key={i} className="phase-card">
@@ -216,6 +253,7 @@ export default function TrainingPlanPage() {
                       </div>
                       <div className="focus">{p.focus}</div>
                       <div className="volume">{p.weekly_volume_guidance}</div>
+                      {p.weekly_time_estimate && <div className="time-estimate">~{p.weekly_time_estimate}</div>}
                       <ul>{p.key_workouts.map((w, wi) => <li key={wi}>{w}</li>)}</ul>
                     </div>
                   ))}

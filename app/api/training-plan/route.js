@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getSessionUser } from "@/lib/authGuard";
-import { getActivitiesForUser, getUserById, getRaceGoal, getTrainingPlan, saveTrainingPlan } from "@/lib/db";
+import { getActivitiesForUser, getUserById, getRaceGoal, getTrainingPlan, saveTrainingPlan, friendlyDbErrorMessage } from "@/lib/db";
 import { buildActivitySummary } from "@/lib/insights";
 import { generateTrainingPlan } from "@/lib/anthropic";
 
@@ -34,7 +34,7 @@ export async function GET(request) {
     ]);
   } catch (e) {
     console.error("Failed to load data for training plan:", e);
-    return NextResponse.json({ error: "server_error", message: String(e.message || e) }, { status: 500 });
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
   }
 
   const now = new Date();
@@ -44,6 +44,7 @@ export async function GET(request) {
     eventName: goal.eventName,
     eventDate: goal.eventDate,
     targetDistance: goal.targetDistance,
+    goalTime: goal.goalTime,
     weeksUntilEvent: weeksUntil(goal.eventDate, now),
   };
 

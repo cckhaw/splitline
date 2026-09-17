@@ -1,8 +1,11 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
-  // @resvg/resvg-js ships a native (napi) binary — keep it out of the
-  // serverless bundle and let Node require() it directly at runtime.
-  serverExternalPackages: ["@resvg/resvg-js"],
+  // @resvg/resvg-js ships a native (napi) binary, and satori's harfbuzzjs
+  // dependency loads a WASM file by relative path at import time — both
+  // break if webpack/Turbopack try to bundle and relocate them (the WASM
+  // path resolves to a nonexistent "/ROOT/..." path once bundled). Keep
+  // both external so Node just require()s them from node_modules as-is.
+  serverExternalPackages: ["@resvg/resvg-js", "satori"],
   // Don't auto-generate AGENTS.md/CLAUDE.md on every build.
   agentRules: false,
   // The bundled .ttf files under assets/fonts/ are read at runtime via

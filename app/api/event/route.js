@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { getRaceGoal, saveRaceGoal, deleteRaceGoal } from "@/lib/db";
-import { DISTANCE_OPTIONS } from "@/lib/eventTypes";
+import { getRaceGoal, saveRaceGoal, deleteRaceGoal, friendlyDbErrorMessage } from "@/lib/db";
+import { DISTANCE_OPTIONS, GOAL_TIME_OPTIONS } from "@/lib/eventTypes";
 
 export const runtime = "nodejs";
 
@@ -16,7 +16,7 @@ export async function GET(request) {
     return NextResponse.json({ goal });
   } catch (e) {
     console.error("Failed to load race goal:", e);
-    return NextResponse.json({ error: "server_error", message: String(e.message || e) }, { status: 500 });
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
   }
 }
 
@@ -24,7 +24,7 @@ export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const { eventType, eventName, eventDate, targetDistance } = await request.json().catch(() => ({}));
+  const { eventType, eventName, eventDate, targetDistance, goalTime } = await request.json().catch(() => ({}));
 
   if (!Object.keys(DISTANCE_OPTIONS).includes(eventType)) {
     return NextResponse.json({ error: "invalid_type", message: "Choose running, duathlon, or triathlon." }, { status: 400 });
@@ -34,6 +34,9 @@ export async function POST(request) {
   }
   if (!targetDistance || !DISTANCE_OPTIONS[eventType].includes(targetDistance)) {
     return NextResponse.json({ error: "invalid_distance", message: "Choose a distance from the list." }, { status: 400 });
+  }
+  if (!goalTime || !GOAL_TIME_OPTIONS[targetDistance]?.includes(goalTime)) {
+    return NextResponse.json({ error: "invalid_goal_time", message: "Choose a goal finish time from the list." }, { status: 400 });
   }
   if (!eventDate || !/^\d{4}-\d{2}-\d{2}$/.test(eventDate)) {
     return NextResponse.json({ error: "invalid_date", message: "Enter a valid event date." }, { status: 400 });
@@ -57,11 +60,12 @@ export async function POST(request) {
       eventName: eventName.trim(),
       eventDate,
       targetDistance,
+      goalTime,
     });
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Failed to save race goal:", e);
-    return NextResponse.json({ error: "server_error", message: String(e.message || e) }, { status: 500 });
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
   }
 }
 
@@ -74,6 +78,6 @@ export async function DELETE(request) {
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Failed to delete race goal:", e);
-    return NextResponse.json({ error: "server_error", message: String(e.message || e) }, { status: 500 });
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
   }
 }

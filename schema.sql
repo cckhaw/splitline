@@ -50,11 +50,13 @@ CREATE TABLE IF NOT EXISTS ai_insights (
 CREATE TABLE IF NOT EXISTS race_goals (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   event_type TEXT NOT NULL,      -- 'running' | 'duathlon' | 'triathlon'
-  event_name TEXT,
+  event_name TEXT NOT NULL,
   event_date DATE NOT NULL,
-  target_distance TEXT,          -- free-text, e.g. "10K", "Olympic distance"
+  target_distance TEXT NOT NULL, -- one of lib/eventTypes.js's DISTANCE_OPTIONS for event_type
+  goal_time TEXT,                -- one of lib/eventTypes.js's GOAL_TIME_OPTIONS for target_distance
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+ALTER TABLE race_goals ADD COLUMN IF NOT EXISTS goal_time TEXT;
 
 -- Cached AI-generated progressive training plan for the current goal
 -- above, keyed by a hash of the inputs (goal + activity summary) so the

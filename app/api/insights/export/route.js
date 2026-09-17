@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
 import { getActivitiesForUser, getAiInsights } from "@/lib/db";
 import { computeTrainingLoad, predictRacePaces } from "@/lib/insights";
-import { buildPredictionCardSvg, buildInjuryCardSvg } from "@/lib/insightCard";
+import { buildPredictionCard, buildInjuryCard } from "@/lib/insightCard";
 import { svgToPng } from "@/lib/renderPng";
 
 export const runtime = "nodejs";
@@ -11,13 +11,14 @@ export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const { section, orientation = "portrait", format = "png" } = await request.json().catch(() => ({}));
+  const { section, orientation = "portrait", format = "png", theme = "dark" } = await request.json().catch(() => ({}));
   if (!["prediction", "injury"].includes(section)) {
     return NextResponse.json({ error: "invalid_section", message: "section must be 'prediction' or 'injury'." }, { status: 400 });
   }
   if (!["portrait", "landscape"].includes(orientation)) {
     return NextResponse.json({ error: "invalid_orientation", message: "orientation must be 'portrait' or 'landscape'." }, { status: 400 });
   }
+  const resolvedTheme = theme === "light" ? "light" : "dark";
 
   try {
     let svg;
@@ -26,16 +27,17 @@ export async function POST(request) {
       if (!activities.length) {
         return NextResponse.json({ error: "no_data", message: "Import activities before exporting this card." }, { status: 400 });
       }
-      svg = buildPredictionCardSvg(
+      svg = await buildPredictionCard(
         { load: computeTrainingLoad(activities), pace: predictRacePaces(activities), sampleSize: activities.length },
-        orientation
+        orientation,
+        resolvedTheme
       );
     } else {
       const cached = await getAiInsights(session.userId);
       if (!cached) {
         return NextResponse.json({ error: "no_analysis", message: "Generate an AI analysis on the dashboard first." }, { status: 400 });
       }
-      svg = buildInjuryCardSvg({ ai: cached.payload }, orientation);
+      svg = await buildInjuryCard({ ai: cached.payload }, orientation, resolvedTheme);
     }
 
     if (format === "svg") {

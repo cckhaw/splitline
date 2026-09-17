@@ -207,10 +207,11 @@ export default function Dashboard() {
     setExportingSection(section);
     setStatusWarn(false);
     try {
+      const theme = document.documentElement.getAttribute("data-theme") || "dark";
       const res = await fetch("/api/insights/export", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ section, orientation, format: "png" }),
+        body: JSON.stringify({ section, orientation, format: "png", theme }),
       });
       if (!res.ok) {
         const data = await res.json().catch(() => ({}));
