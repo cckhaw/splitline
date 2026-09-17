@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function AccountPage() {
   const router = useRouter();
@@ -29,8 +30,14 @@ export default function AccountPage() {
   const [birthDate, setBirthDate] = useState("");
   const [birthStatus, setBirthStatus] = useState("");
   const [birthSaving, setBirthSaving] = useState(false);
+  const [promptBirthdate, setPromptBirthdate] = useState(false);
 
   useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("prompt") === "birthdate") {
+      setPromptBirthdate(true);
+      window.history.replaceState({}, "", "/account");
+    }
     fetch("/api/me").then((r) => r.json()).then((data) => {
       if (!data.authenticated) { router.push("/login"); return; }
       setMe(data);
@@ -160,6 +167,7 @@ export default function AccountPage() {
         <div className="wordmark">SPLIT<span>LINE</span></div>
         <nav className="navlinks">
           <Link href="/app">Dashboard</Link>
+          <ThemeToggle />
         </nav>
       </header>
 
@@ -231,6 +239,11 @@ export default function AccountPage() {
 
       <div className="panel">
         <h2>Date of birth</h2>
+        {promptBirthdate && !birthDate && (
+          <div className="status-line warn" style={{ marginTop: -8, marginBottom: 12 }}>
+            One more thing: Splitline requires accounts to be 13 or older. Please confirm your date of birth below.
+          </div>
+        )}
         <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>
           Strava&rsquo;s API doesn&rsquo;t share your date of birth, so Splitline can&rsquo;t read your age from
           your Strava profile. Add it here to sharpen the injury-risk estimate on your dashboard — it&rsquo;s

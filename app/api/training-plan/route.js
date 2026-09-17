@@ -1,0 +1,78 @@
+import { NextResponse } from "next/server";
+import crypto from "node:crypto";
+import { getSessionUser } from "@/lib/authGuard";
+import { getActivitiesForUser, getUserById, getRaceGoal, getTrainingPlan, saveTrainingPlan, friendlyDbErrorMessage } from "@/lib/db";
+import { buildActivitySummary } from "@/lib/insights";
+import { generateTrainingPlan } from "@/lib/anthropic";
+
+export const runtime = "nodejs";
+export const maxDuration = 60; // Pro plan+; Hobby caps this lower regardless — see README.
+
+function weeksUntil(eventDate, now) {
+  const ms = new Date(eventDate).getTime() - now.getTime();
+  return Math.max(0, Math.ceil(ms / (7 * 24 * 60 * 60 * 1000)));
+}
+
+function hashInput(input) {
+  return crypto.createHash("sha256").update(JSON.stringify(input)).digest("hex");
+}
+
+export async function GET(request) {
+  const session = await getSessionUser(request);
+  if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
+
+  const url = new URL(request.url);
+  const forceRefresh = url.searchParams.get("refresh") === "1";
+
+  let goal, activities, user;
+  try {
+    goal = await getRaceGoal(session.userId);
+    if (!goal) return NextResponse.json({ error: "no_goal", message: "Set an upcoming event first." }, { status: 400 });
+    [activities, user] = await Promise.all([
+      getActivitiesForUser(session.userId, 30),
+      getUserById(session.userId),
+    ]);
+  } catch (e) {
+    console.error("Failed to load data for training plan:", e);
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
+  }
+
+  const now = new Date();
+  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now);
+  const eventInfo = {
+    eventType: goal.eventType,
+    eventName: goal.eventName,
+    eventDate: goal.eventDate,
+    targetDistance: goal.targetDistance,
+    goalTime: goal.goalTime,
+    weeksUntilEvent: weeksUntil(goal.eventDate, now),
+  };
+
+  const inputHash = hashInput({ summary, eventInfo });
+  let cached = null;
+  try {
+    cached = await getTrainingPlan(session.userId);
+  } catch (e) {
+    console.error("Failed to read cached training plan:", e);
+  }
+
+  if (!forceRefresh && cached && cached.input_hash === inputHash) {
+    return NextResponse.json({ goal: eventInfo, plan: cached.payload, generatedAt: cached.generated_at, cached: true });
+  }
+
+  try {
+    const plan = await generateTrainingPlan(summary, eventInfo);
+    try {
+      await saveTrainingPlan(session.userId, inputHash, plan);
+    } catch (e) {
+      console.error("Failed to cache training plan (returning it anyway):", e);
+    }
+    return NextResponse.json({ goal: eventInfo, plan, generatedAt: new Date().toISOString(), cached: false });
+  } catch (e) {
+    console.error("AI training plan generation failed:", e);
+    if (cached) {
+      return NextResponse.json({ goal: eventInfo, plan: cached.payload, generatedAt: cached.generated_at, cached: true, stale: true });
+    }
+    return NextResponse.json({ goal: eventInfo, plan: null, error: String(e.message || e) });
+  }
+}

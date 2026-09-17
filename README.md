@@ -147,12 +147,17 @@ panel. Both are reasonable v2 directions, not implied by what's here.
 
 ## Accounts: signup, Google login, and the account page
 
-Signup collects full name, email, password, and password confirmation,
-then emails a 6-digit code (via Resend — see env vars above) that has to
-be entered before the account can log in. "Continue with Google" is
-available on both the signup and login pages; a Google sign-in is
-email-verified automatically (Google already confirmed it) and links to
-an existing password-based account with the same email if one exists.
+Signup collects full name, email, date of birth, password, and password
+confirmation, then emails a 6-digit code (via Resend — see env vars
+above) that has to be entered before the account can log in. Accounts
+require an age of 13 or older — signup is rejected server-side (not just
+in the UI) for anyone younger. "Continue with Google" is available on
+both the signup and login pages; a Google sign-in is email-verified
+automatically (Google already confirmed it) and links to an existing
+password-based account with the same email if one exists. Google's basic
+profile scope doesn't include date of birth, so the age check can't run
+at that point — new Google sign-ups are instead sent to the account page
+with a prompt to confirm their date of birth there (also enforced at 13+).
 
 Logged-in users get a **My account** page (linked from the dashboard
 header) to change their name, email (also re-verified by code, sent to
@@ -187,12 +192,138 @@ when the underlying activity summary actually changes, or when the
 dashboard's "Refresh AI analysis" button is clicked — the model isn't
 called on every page load.
 
+## Light/dark appearance
+
+A theme toggle appears on every page: a standalone button
+(`components/ThemeToggle.js`) on the marketing/auth/account pages, and as
+a "Light mode"/"Dark mode" item inside the dashboard's user menu
+(`components/UserMenu.js` — see below) so it doesn't compete with that
+page's own toggles. Both write `data-theme` on `<html>` and persist the
+choice to `localStorage` — there's no server-side account setting for it,
+so it's per-browser, not per-account. An inline script in `app/layout.js`
+applies the stored theme before first paint to avoid a flash of the wrong
+colors; that script intentionally runs before React hydrates, which is
+why `<html>` carries `suppressHydrationWarning`. Light mode reuses the
+same warm-paper palette as the "paper" overlay card theme, so the brand
+stays consistent across both surfaces.
+
+The dashboard header itself is a single control: clicking the athlete's
+name opens a dropdown (Training plan, My account, Light/dark mode, Log
+out) instead of spreading those as flat links — `components/UserMenu.js`.
+
+## Exporting the prediction and injury panels as social images
+
+Both the "Training load & race pace" panel and the "Injury risk, recovery
+& nutrition" panel have a portrait/landscape toggle and an "Export image"
+button. This hits `/api/insights/export`, which rebuilds the panel as a
+real flexbox layout via [satori](https://github.com/vercel/satori) — the
+same engine behind `next/og` — and rasterizes it to PNG with
+`lib/renderPng.js` (`@resvg/resvg-js`). Portrait exports at 1080×1920
+(9:16) and landscape at 1920×1080 (16:9). The injury card renders from
+whatever AI analysis is currently cached, so generate or refresh that
+panel first if there isn't one yet.
+
+Two things make this behave like an actual screenshot rather than a
+generic export:
+
+- **Theme-aware.** The client sends whatever theme (`dark`/`light`) is
+  currently active on `<html>`, and the card is built from that same
+  palette (`lib/theme.js`) — export a card in light mode and it comes
+  back light, not always dark.
+- **Responsive by construction.** Satori/resvg don't run a browser, so
+  there's no media query to fire — instead `lib/insightCard.js` picks the
+  layout directly from the orientation being rendered: portrait uses the
+  same 2-column pace grid / single-column risk-factor stack the site's
+  own CSS switches to below its `860px`/`600px` breakpoints, landscape
+  uses the 4-column / 3-column desktop layout. Text wraps naturally
+  within satori's flexbox, so there's no manual line-wrapping logic to
+  maintain the way a hand-positioned SVG would need.
+
+Rasterizing to PNG bundles the app's actual type files
+(`assets/fonts/*.ttf` — Space Grotesk and IBM Plex Mono, both SIL Open
+Font License) rather than asking the renderer to find "Space Grotesk" /
+"IBM Plex Mono" among the system's installed fonts. That distinction
+matters in production: Vercel's serverless runtime has no system fonts
+at all, so `loadSystemFonts` finds nothing to match, and every text
+element silently renders as invisible — the background renders fine, but
+the exported card comes back blank. `next.config.mjs` handles two
+related build-time gotchas this introduced: `outputFileTracingIncludes`
+makes sure the `.ttf` files actually ship with the deployed function
+(they're read via `fs` at runtime, not imported, so Next's tracer won't
+find them on its own), and `serverExternalPackages` keeps `satori` (and
+its `harfbuzzjs` WASM dependency) out of the bundler entirely — bundling
+it rewrites the path it loads `hb.wasm` from to something that doesn't
+exist at runtime.
+
+## Training plan for an upcoming event
+
+The dashboard's hamburger menu (click the athlete's name, top right) has
+a **Training plan** link that takes an athlete to set one upcoming event
+— a running race, duathlon, or triathlon, with a required name, a
+distance chosen from a dropdown scoped to that event type, and a goal
+finish time chosen from a dropdown scoped to that distance
+(`lib/eventTypes.js` is the single source of truth for all of this, for
+both the form and the server-side validation in `/api/event`):
+
+- **Running:** 5K, 10K, Half Marathon, Marathon, Ultra (50K+) — each with its own goal-time bands
+- **Duathlon:** Sprint (5K run – 30K bike – 5K run), Standard (10K–60K–10K)
+- **Triathlon:** Sprint, Olympic Distance, Half Ironman (70.3), Full Ironman (140.6)
+
+Goal time is a coarse band ("1:45–2:00", "Under 3:00", …) rather than a
+raw duration picker — enough for the AI plan to target a real pace
+without turning the form into two more dropdowns, and "No specific goal —
+just finish" is always an option. The event date has to be at least 4
+weeks out (enforced server-side, so there's room for a real progressive
+plan).
+
+Once set, `/api/training-plan` sends the same aggregated activity summary
+used by the injury-risk panel, plus the event type, distance, goal time,
+and exact weeks remaining, to Claude, which returns a detailed periodized
+plan (`lib/anthropic.js`'s `generateTrainingPlan`):
+
+- **3-8 phases** (e.g. Base/Build/Peak/Taper) spanning the full time to
+  the event — grouped into phases rather than one entry per week, since
+  that range can be a month or most of a year — each with its focus,
+  weekly volume guidance, a **weekly time-commitment estimate** (e.g.
+  "5-7 hours/week"), key workouts, and a `relative_load` value (0-100)
+  the model assigns consistently phase to phase.
+- A **training-progress chart** (`lib/progressChart.js`) plotting that
+  `relative_load` across phases as a line/area illustration, rendered
+  inline on the training-plan page and colored from the current theme —
+  the site's own accent color as the one series (a single series needs no
+  legend; the "Training progress" heading names it). It isn't part of the
+  image-export feature above, which is scoped to the two dashboard panels.
+- Detailed recovery guidelines, a nutrition plan, pre-race preparation
+  (48-72h out), and a race-day strategy — 5-8 bullets each, with pacing
+  in the race-day strategy tied to the chosen goal time when one was set.
+
+Like the injury panel, the plan is cached (`training_plans` table) and
+only regenerated when the goal or the underlying activity data changes,
+or via the page's "Refresh plan" button. Setting a new event clears any
+previously cached plan.
+
+This is the heaviest AI call in the app (a bigger structured schema than
+the injury panel, now bigger still with the richer per-phase detail), so
+it runs at `effort: "medium"` rather than `"high"` and `max_tokens: 6000`
+to leave headroom for the longer output — `/api/training-plan` sets
+`maxDuration = 60`, but **that ceiling only applies on Vercel's Pro plan
+or above; the Hobby plan hard-caps every serverless function at 10
+seconds regardless of what the code requests**, and a slow AI call that
+gets killed mid-flight used to come back as an empty response that broke
+`res.json()` client-side with a raw "Unexpected end of JSON input" error.
+Both `/api/event` and `/api/training-plan` now wrap their logic in
+try/catch so an unexpected failure — including a Postgres "relation ...
+does not exist" error from `schema.sql` not having been (re-)run yet,
+detected by `lib/db.js`'s `friendlyDbErrorMessage` and turned into an
+actionable message — always returns a proper JSON error instead of a raw
+connection cutoff, and the client (`safeJson` in
+`app/training-plan/page.js`) parses defensively either way. But if
+training-plan generation times out consistently despite that, the Hobby
+plan's 10-second cap is the first thing to check — the richer plan this
+version generates makes that more likely to bite, not less.
+
 ## What's still simple on purpose (MVP tradeoffs)
 
-- **PNG rendering uses system fonts as a fallback** — bundle the actual
-  Space Grotesk / IBM Plex Mono `.ttf` files and pass them to
-  `@resvg/resvg-js`'s `font.fontFiles` in `app/api/overlay/route.js` for
-  pixel-exact match to the preview.
 - **No webhook / auto-import.** Someone has to click Import (or
   Re-sync). Strava's push-subscription API would close that gap.
 - **No self-service password reset** (see above) — signup/login/email

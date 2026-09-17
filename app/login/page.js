@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
 
 const ERROR_MESSAGES = {
   google_not_configured: "Google sign-in isn't set up on this deployment yet.",
@@ -62,7 +63,10 @@ export default function LoginPage() {
 
   return (
     <div className="shell narrow">
-      <div className="wordmark" style={{ marginBottom: 28 }}>SPLIT<span>LINE</span></div>
+      <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
+        <div className="wordmark">SPLIT<span>LINE</span></div>
+        <ThemeToggle />
+      </div>
       <div className="panel">
         <h2>Log in</h2>
         <a href="/api/auth/google">

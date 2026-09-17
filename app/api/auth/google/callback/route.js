@@ -27,6 +27,7 @@ export async function GET(request) {
     if (!profile.email) return fail("google_no_email");
 
     let user = await getUserByGoogleId(profile.sub);
+    let isNewUser = false;
     if (!user) {
       const existing = await getUserByEmail(profile.email);
       if (existing) {
@@ -34,15 +35,19 @@ export async function GET(request) {
         if (!existing.email_verified && profile.email_verified) await setEmailVerified(existing.id);
         user = existing;
       } else {
+        // Google's basic profile scope doesn't include date of birth, so
+        // the under-13 signup block can't be enforced here — new Google
+        // accounts are instead nudged to add it on the account page.
         user = await createUser(profile.name || profile.email, profile.email, null, {
           emailVerified: Boolean(profile.email_verified),
           googleId: profile.sub,
         });
+        isNewUser = true;
       }
     }
 
     const token = await createSession(user.id);
-    const res = NextResponse.redirect(`${url.origin}/app`);
+    const res = NextResponse.redirect(`${url.origin}${isNewUser ? "/account?prompt=birthdate" : "/app"}`);
     res.cookies.set(SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: SESSION_MAX_AGE, path: "/" });
     res.cookies.delete("google_oauth_state");
     return res;

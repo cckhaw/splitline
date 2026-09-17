@@ -1,12 +1,15 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { createUser, getUserByEmail, updateUserName, updateUserPassword } from "@/lib/db";
+import { createUser, getUserByEmail, updateUserName, updateUserPassword, updateUserBirthDate } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
+import { ageFromBirthDate } from "@/lib/insights";
 
 export const runtime = "nodejs";
 
+const MIN_SIGNUP_AGE = 13; // blocks age 12 and below
+
 export async function POST(request) {
-  const { name, email, password, confirmPassword } = await request.json().catch(() => ({}));
+  const { name, email, password, confirmPassword, birthDate } = await request.json().catch(() => ({}));
 
   if (!name || !name.trim()) {
     return NextResponse.json({ error: "missing_name", message: "Enter your full name." }, { status: 400 });
@@ -21,6 +24,22 @@ export async function POST(request) {
     return NextResponse.json({ error: "password_mismatch", message: "Passwords don't match." }, { status: 400 });
   }
 
+  if (!birthDate || !/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) {
+    return NextResponse.json({ error: "invalid_birthdate", message: "Enter your date of birth." }, { status: 400 });
+  }
+  const parsedBirthDate = new Date(birthDate);
+  const now = new Date();
+  if (Number.isNaN(parsedBirthDate.getTime()) || parsedBirthDate > now || now.getFullYear() - parsedBirthDate.getFullYear() > 120) {
+    return NextResponse.json({ error: "invalid_birthdate", message: "Enter a valid date of birth." }, { status: 400 });
+  }
+  const age = ageFromBirthDate(birthDate, now);
+  if (age < MIN_SIGNUP_AGE) {
+    return NextResponse.json(
+      { error: "too_young", message: `You must be at least ${MIN_SIGNUP_AGE} years old to create a Splitline account.` },
+      { status: 403 }
+    );
+  }
+
   const existing = await getUserByEmail(email);
   if (existing && existing.email_verified) {
     return NextResponse.json({ error: "email_taken", message: "An account with that email already exists." }, { status: 409 });
@@ -32,9 +51,10 @@ export async function POST(request) {
     // Unverified account from a previous, abandoned signup attempt — pick it back up.
     await updateUserName(existing.id, name.trim());
     await updateUserPassword(existing.id, hash);
+    await updateUserBirthDate(existing.id, birthDate);
     user = existing;
   } else {
-    user = await createUser(name.trim(), email, hash);
+    user = await createUser(name.trim(), email, hash, { birthDate });
   }
   await issueVerificationCode(user.id, "signup_email", user.email);
 
