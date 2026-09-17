@@ -27,6 +27,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tier_expires_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT UNIQUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+-- Self-reported, optional; used only to scale the shoe-wear estimate in
+-- lib/equipment.js (heavier impact compresses midsole foam faster) — same
+-- reasoning as birth_date above: Strava's API doesn't expose body weight.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg DOUBLE PRECISION;
 
 -- Six-digit codes emailed for signup verification and email-change
 -- confirmation. Codes are stored hashed (sha256), never in plaintext.
@@ -90,6 +94,19 @@ CREATE TABLE IF NOT EXISTS training_plans (
   generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Cached AI-generated race-day pacing/fueling plan for the current goal
+-- (race_goals above) plus this feature's own race-day inputs (expected
+-- temperature/humidity, course elevation gain) — keyed by a hash of all
+-- three plus the activity summary, same anti-gaming approach as
+-- training_plans: regenerating only actually happens when something changed.
+CREATE TABLE IF NOT EXISTS race_day_plans (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  input_hash TEXT NOT NULL,
+  race_day_inputs JSONB NOT NULL,
+  payload JSONB NOT NULL,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS strava_connections (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   strava_athlete_id BIGINT,
@@ -116,8 +133,26 @@ CREATE TABLE IF NOT EXISTS activities (
   avg_speed_kmh DOUBLE PRECISION,
   calories DOUBLE PRECISION,
   trace JSONB,
+  gear_id TEXT,                 -- Strava gear id (shoe/bike) used on this activity, if any
   imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, strava_activity_id)
 );
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS gear_id TEXT;
 
 CREATE INDEX IF NOT EXISTS idx_activities_user_date ON activities (user_id, start_date DESC);
+
+-- Cached from Strava's /gear/{id} endpoint during import — distance_km is
+-- Strava's own lifetime total for that piece of gear (not bounded by
+-- whatever's in `activities`), which is what the wear-percentage estimate
+-- in lib/equipment.js needs.
+CREATE TABLE IF NOT EXISTS gear (
+  id TEXT NOT NULL,             -- Strava gear id, e.g. "g12345" (shoe) or "b12345" (bike)
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  gear_type TEXT NOT NULL,      -- 'shoe' | 'bike'
+  name TEXT,
+  brand_name TEXT,
+  model_name TEXT,
+  distance_km DOUBLE PRECISION,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (user_id, id)
+);

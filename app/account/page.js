@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import ThemeToggle from "@/components/ThemeToggle";
+import AppHeader from "@/components/AppHeader";
 import { PLANS, formatUsd } from "@/lib/pricing";
 import { TIERS } from "@/lib/membership";
 
@@ -43,6 +42,10 @@ export default function AccountPage() {
   const [birthSaving, setBirthSaving] = useState(false);
   const [promptBirthdate, setPromptBirthdate] = useState(false);
 
+  const [weightKg, setWeightKg] = useState("");
+  const [weightStatus, setWeightStatus] = useState("");
+  const [weightSaving, setWeightSaving] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("prompt") === "birthdate") {
@@ -62,6 +65,7 @@ export default function AccountPage() {
       setMe(data);
       setName(data.name || "");
       setBirthDate(data.birthDate ? String(data.birthDate).slice(0, 10) : "");
+      setWeightKg(data.weightKg ? String(data.weightKg) : "");
     });
   }, [router]);
 
@@ -214,17 +218,31 @@ export default function AccountPage() {
     }
   }
 
+  async function saveWeight(e) {
+    e.preventDefault();
+    setWeightSaving(true);
+    setWeightStatus("");
+    try {
+      const res = await fetch("/api/account/weight", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ weightKg: Number(weightKg) }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setWeightStatus("Saved — this sharpens the shoe-wear estimate on your dashboard.");
+    } catch (e) {
+      setWeightStatus(e.message || "Couldn't save that.");
+    } finally {
+      setWeightSaving(false);
+    }
+  }
+
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
   return (
     <div className="shell">
-      <header className="top">
-        <div className="wordmark">SPLIT<span>LINE</span></div>
-        <nav className="navlinks">
-          <Link href="/app">Dashboard</Link>
-          <ThemeToggle />
-        </nav>
-      </header>
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>My account</h2>
 
@@ -232,10 +250,14 @@ export default function AccountPage() {
         <h2>Membership</h2>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <span className={`tier-badge tier-${me.tier}`}>{TIERS[me.tier]?.label || "Free"} Tier</span>
+            <span className={`tier-badge tier-${me.tier}`}>
+              {TIERS[me.tier]?.label || "Free"} Tier{me.isTrial ? " - Trial" : ""}
+            </span>
             {me.tier !== "free" && me.tierExpiresAt && (
               <div className="hint" style={{ marginTop: 8 }}>
-                {new Date(me.tierExpiresAt) > new Date() ? "Renews" : "Expired"} on {formatDate(me.tierExpiresAt)}
+                {new Date(me.tierExpiresAt) > new Date()
+                  ? (me.isTrial ? "Trial ends" : "Renews")
+                  : (me.isTrial ? "Trial ended" : "Expired")} on {formatDate(me.tierExpiresAt)}
               </div>
             )}
             <div className="hint" style={{ marginTop: 8 }}>
@@ -365,6 +387,29 @@ export default function AccountPage() {
           {birthStatus && <div className="status-line">{birthStatus}</div>}
           <button className="primary" type="submit" disabled={birthSaving} style={{ marginTop: 12 }}>
             {birthSaving ? "Saving…" : "Save date of birth"}
+          </button>
+        </form>
+      </div>
+
+      <div className="panel">
+        <h2>Body weight</h2>
+        <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>
+          Optional. Heavier impact compresses running-shoe foam faster, so this sharpens the shoe-wear estimate
+          in the Equipment Lifecycle panel on your dashboard — it&rsquo;s used for that estimate only.
+        </div>
+        <form onSubmit={saveWeight}>
+          <input
+            type="number"
+            min={25}
+            max={250}
+            step="0.1"
+            placeholder="e.g. 68"
+            value={weightKg}
+            onChange={(e) => setWeightKg(e.target.value)}
+          />
+          {weightStatus && <div className="status-line">{weightStatus}</div>}
+          <button className="primary" type="submit" disabled={weightSaving || !weightKg} style={{ marginTop: 12 }}>
+            {weightSaving ? "Saving…" : "Save weight (kg)"}
           </button>
         </form>
       </div>

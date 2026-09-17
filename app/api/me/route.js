@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
 import { getUserById, getStravaConnection, countActivitiesForUser, friendlyDbErrorMessage } from "@/lib/db";
-import { resolveEffectiveTier } from "@/lib/membership";
+import { resolveEffectiveTier, isTrialTier } from "@/lib/membership";
 
 export const runtime = "nodejs";
 
@@ -21,8 +21,10 @@ export async function GET(request) {
       emailVerified: user?.email_verified,
       hasGoogleLogin: Boolean(user?.google_id),
       birthDate: user?.birth_date,
+      weightKg: user?.weight_kg,
       tier: resolveEffectiveTier(user),
       tierExpiresAt: user?.tier_expires_at,
+      isTrial: isTrialTier(user),
       hasStripeCustomer: Boolean(user?.stripe_customer_id),
       stravaConnected: Boolean(connection),
       usingOwnStravaApp: Boolean(connection?.ownClientId),
