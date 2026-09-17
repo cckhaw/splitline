@@ -8,6 +8,7 @@
     "start": "next start"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.70.0",
     "@modelcontextprotocol/server": "^2.0.0",
     "@resvg/resvg-js": "^2.6.2",
     "bcryptjs": "^3.0.3",

@@ -75,6 +75,10 @@ deletes everything it made. All five lines should print `✓`.
 | `SESSION_SECRET` | random 32+ chars — `openssl rand -base64 32` |
 | `ENCRYPTION_KEY` | random 32+ chars — a **different** value than `SESSION_SECRET` |
 | `DATABASE_URL` | from step 2 |
+| `RESEND_API_KEY` | from [resend.com](https://resend.com) — sends the signup/email-change verification codes. Without it, codes are just logged to the server console (fine for local dev, not for production). |
+| `EMAIL_FROM` | optional — the From address for those emails, e.g. `Splitline <noreply@yourdomain.com>` (must be a domain verified in Resend) |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional — from [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) (OAuth client ID, type "Web application", authorized redirect URI `https://your-domain/api/auth/google/callback`). Without these, the "Continue with Google" buttons redirect to an error instead of Google. |
+| `ANTHROPIC_API_KEY` | from [console.anthropic.com](https://console.anthropic.com) — powers the injury-risk/recovery/nutrition panel. Without it, that panel just shows "couldn't generate an AI analysis"; the rest of the app is unaffected. |
 
 ### 4. Push to Git, import into Vercel, deploy
 
@@ -141,6 +145,48 @@ sense of the product adjusting someone's *future* training plan on its
 own is further still — that's a training-plan engine, not a dashboard
 panel. Both are reasonable v2 directions, not implied by what's here.
 
+## Accounts: signup, Google login, and the account page
+
+Signup collects full name, email, password, and password confirmation,
+then emails a 6-digit code (via Resend — see env vars above) that has to
+be entered before the account can log in. "Continue with Google" is
+available on both the signup and login pages; a Google sign-in is
+email-verified automatically (Google already confirmed it) and links to
+an existing password-based account with the same email if one exists.
+
+Logged-in users get a **My account** page (linked from the dashboard
+header) to change their name, email (also re-verified by code, sent to
+the *new* address), and password. There's still no self-service
+"forgot password" flow — add one before a public launch if you don't
+want support tickets over locked-out accounts.
+
+## Injury-risk, recovery, and nutrition — and a real limitation on "age from Strava"
+
+The dashboard's "Injury risk, recovery & nutrition" panel sends an
+aggregated statistical summary of the athlete's last 30 imported
+activities — weekly volume, rest-day frequency, training-load trend,
+sport mix, recent vs. prior heart rate, age if known — to Claude
+(`lib/anthropic.js`, requires `ANTHROPIC_API_KEY`), which returns a
+structured risk level/score, specific risk factors, and a recovery and
+nutrition plan grounded in those numbers. It's a wellness heuristic
+written by an LLM, not a medical assessment, and the UI keeps that
+disclaimer visible.
+
+**Age does not actually come from Strava.** Strava's public API
+(`GET /athlete`) does not return date of birth for any account — it
+never has, for privacy reasons — so there is no field `lib/strava.js`
+could read to compute age. Instead, the account page has an optional
+"date of birth" field the athlete fills in themselves; if it's set, age
+is passed to the model, and if not, the panel says so and reasons from
+training patterns alone rather than guessing. This is the honest
+tradeoff for a feature described as "getting age from Strava" — that
+data point isn't available from Strava at all.
+
+Results are cached per user (`ai_insights` table) and only regenerated
+when the underlying activity summary actually changes, or when the
+dashboard's "Refresh AI analysis" button is clicked — the model isn't
+called on every page load.
+
 ## What's still simple on purpose (MVP tradeoffs)
 
 - **PNG rendering uses system fonts as a fallback** — bundle the actual
@@ -149,9 +195,9 @@ panel. Both are reasonable v2 directions, not implied by what's here.
   pixel-exact match to the preview.
 - **No webhook / auto-import.** Someone has to click Import (or
   Re-sync). Strava's push-subscription API would close that gap.
-- **No email verification or password reset.** Fine for early access;
-  add before a public launch if you don't want support tickets over
-  locked-out accounts.
+- **No self-service password reset** (see above) — signup/login/email
+  verification/Google sign-in are all there, but a locked-out user with
+  no working password currently has no recovery flow of their own.
 
 ## Local development
 

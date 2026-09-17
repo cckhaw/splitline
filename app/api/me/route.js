@@ -14,7 +14,11 @@ export async function GET(request) {
 
   return NextResponse.json({
     authenticated: true,
+    name: user?.name,
     email: user?.email,
+    emailVerified: user?.email_verified,
+    hasGoogleLogin: Boolean(user?.google_id),
+    birthDate: user?.birth_date,
     stravaConnected: Boolean(connection),
     usingOwnStravaApp: Boolean(connection?.ownClientId),
     activityCount,

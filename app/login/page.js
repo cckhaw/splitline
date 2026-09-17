@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+
+const ERROR_MESSAGES = {
+  google_not_configured: "Google sign-in isn't set up on this deployment yet.",
+  google_access_denied: "Google sign-in was cancelled.",
+  google_no_email: "That Google account has no email address to sign in with.",
+  state_mismatch: "That sign-in attempt looked tampered with — try again.",
+  google_auth_failed: "Google sign-in failed — try again.",
+};
 
 export default function LoginPage() {
   const router = useRouter();
@@ -10,10 +18,21 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [needsVerification, setNeedsVerification] = useState(false);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const err = params.get("error");
+    if (err) {
+      setError(ERROR_MESSAGES[err] || "Couldn't sign in.");
+      window.history.replaceState({}, "", "/login");
+    }
+  }, []);
 
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+    setNeedsVerification(false);
     setLoading(true);
     try {
       const res = await fetch("/api/auth/login", {
@@ -22,7 +41,17 @@ export default function LoginPage() {
         body: JSON.stringify({ email, password }),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.message || "Couldn't log in.");
+      if (!res.ok) {
+        if (data.error === "email_unverified") {
+          await fetch("/api/auth/resend-code", {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ email }),
+          });
+          setNeedsVerification(true);
+        }
+        throw new Error(data.message || "Couldn't log in.");
+      }
       router.push("/app");
     } catch (e) {
       setError(e.message);
@@ -36,12 +65,22 @@ export default function LoginPage() {
       <div className="wordmark" style={{ marginBottom: 28 }}>SPLIT<span>LINE</span></div>
       <div className="panel">
         <h2>Log in</h2>
+        <a href="/api/auth/google">
+          <button type="button" style={{ marginBottom: 16 }}>Continue with Google</button>
+        </a>
+        <div className="hint" style={{ textAlign: "center", margin: "0 0 16px" }}>or</div>
         <form onSubmit={handleSubmit}>
           <label>Email</label>
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <label>Password</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
+          {needsVerification && (
+            <div className="hint">
+              We sent a fresh verification code to {email}.{" "}
+              <Link href={`/signup?verify=${encodeURIComponent(email)}`}>Enter it here</Link>.
+            </div>
+          )}
           <button className="primary" type="submit" disabled={loading} style={{ marginTop: 18 }}>
             {loading ? "Logging in…" : "Log in"}
           </button>

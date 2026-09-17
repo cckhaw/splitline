@@ -14,7 +14,7 @@ const email = `smoke-test-${Date.now()}@example.invalid`;
 
 async function main() {
   const hash = await bcrypt.hash("throwaway-password", 10);
-  const user = await db.createUser(email, hash);
+  const user = await db.createUser("Smoke Test", email, hash);
   console.log("✓ created user", user.id);
 
   const fetched = await db.getUserByEmail(email);
