@@ -167,16 +167,65 @@ the *new* address), and password. There's still no self-service
 "forgot password" flow — add one before a public launch if you don't
 want support tickets over locked-out accounts.
 
-## Dashboard layout: telemetry overlays first
+## Dashboard layout
 
-The dashboard leads with the **telemetry overlay gallery** — a
-cockpit-readout card per imported activity (pace/power/heart rate hero
-metric, the trace itself, three themes) meant to be saved and posted
-straight to a Strava feed. Everything else (training load, the
-Biomechanical Shield, equipment lifecycle) renders below it, once
-there's data to compute from. This was originally built first but shown
-last; it's the actual hero feature, so it's now the first thing shown
-once Strava is connected and activities are imported.
+Main column, top to bottom: Training load, Biomechanical &amp;
+Overtraining Shield, then Telemetry overlays. A right-hand sidebar
+(sticky — stays in view as the main column scrolls, with its own
+independent scroll once the list is tall) holds Equipment Lifecycle
+&amp; Telemetry. All of it only renders once there's data to compute
+from (Strava connected, activities imported).
+
+## Telemetry overlays: one summary infographic, not 30 cards
+
+This used to be a gallery of 30 individual per-activity cards (one
+telemetry overlay per imported activity). It's now a single infographic
+summarizing the whole imported period instead — `lib/telemetrySummary.js`
+aggregates every stored activity into one bundle, `lib/telemetrySummarySvg.js`
+draws it, and `/api/telemetry-summary` serves it as SVG (for the on-page
+preview — being vector, it scales cleanly to any container width, which
+is what makes it "responsive" without a second rendering path) or PNG
+(for the "Save as image" button, via the same `lib/renderPng.js`
+rasterizer the rest of the app uses). The per-activity overlay engine
+(`lib/svg.js`, `/api/overlay`) wasn't touched — it's still what
+`/api/mcp` (the hosted MCP connector) uses for a single activity.
+
+The infographic has three parts:
+
+- **Total training time**, the date range it spans, and the
+  acute:chronic load figure from the training-load panel.
+- **A fatigue gauge** (`lib/fatigue.js`) — a semi-circle meter, needle
+  position from a 0-100 score. Deterministic, not measured: it blends
+  how many hours since the last activity ended (scaled by how hard that
+  last effort was relative to the athlete's own recent average — a
+  harder effort keeps the needle further right for longer) with a bump
+  when the acute:chronic ratio is already elevated. It's a duration/
+  intensity/recency heuristic from the athlete's own history, the same
+  honest framing as the training-load panel it borrows from — not a
+  physiological measurement (no HRV, no resting-HR baseline).
+- **A training-intensity trend** across the period — the same
+  per-activity load heuristic the training-load panel uses
+  (`estimateLoad`, exported from `lib/insights.js` so the two panels
+  can't tell visually different stories from two different formulas),
+  charted chronologically. Needs at least 2 activities to draw a line;
+  with only 1, it says so instead of showing a broken chart.
+- **Stat tiles** for whichever of avg heart rate / avg power / avg pace
+  the imported activities actually have.
+
+**Weather and humidity are not shown.** The original ask was for
+weather/humidity "across all the activity location," but there's no
+weather API key in this environment (the same gap noted for the
+race-day plan) and Strava's API has no humidity field at all. The one
+real signal available is `average_temp` — a device-recorded temperature
+Strava occasionally returns when the recording device had a sensor —
+now captured on import (`activities.avg_temp_c`) and averaged into a
+"Avg recorded temp" tile when enough activities have it. This is
+explicitly not live weather and the UI doesn't claim otherwise.
+
+## Biomechanical & Overtraining Shield — and a real limitation on "age from Strava"
+
+The dashboard's "Biomechanical & Overtraining Shield" panel is a
+**physics-model + LLM** hybrid, not an LLM guessing from raw numbers:
 
 ## Biomechanical & Overtraining Shield — and a real limitation on "age from Strava"
 
@@ -233,24 +282,33 @@ called on every page load.
 
 ## Equipment Lifecycle & Telemetry
 
-A dashboard panel estimating wear on the athlete's Strava-tagged gear
+A sidebar (sticky, right-hand side, scrolls independently once the list
+is tall) estimating wear on all of the athlete's registered Strava gear
 (shoes and bikes) — **entirely deterministic, no LLM call**: the
 underlying logic (mileage ÷ a lifespan threshold) is formulaic rule
 evaluation, not something a language model improves, so this panel
 costs nothing against the membership tiers' AI budget.
 
-- `/api/import` reads each activity's `gear_id` and fetches/caches the
-  gear's own lifetime distance from Strava's `/gear/{id}` endpoint (a
-  `gear` table, keyed by user + Strava gear id) — the wear estimate uses
-  Strava's own lifetime mileage for that shoe/bike, not just what's
-  visible in the last 30 imported activities.
+- `/api/import` fetches the athlete's **complete gear roster** via
+  `GET /athlete` (which returns `shoes`/`bikes` arrays — every piece of
+  gear ever registered — only for the token's own owner) once per
+  import/re-sync run, then `/gear/{id}` per item for full detail (name,
+  brand, model, lifetime distance, retired status), caching all of it in
+  a `gear` table. This runs regardless of what's tagged on the 30
+  imported activities — deriving gear purely from `activity.gear_id`, as
+  an earlier version of this feature did, would silently miss anything
+  the athlete hadn't worn in their last 30 activities. Gear the athlete
+  has marked **retired** on Strava is fetched too (so its status stays
+  known) but filtered out of what the panel displays — a retired shoe
+  isn't something that still needs replacing.
 - `lib/equipment.js` estimates a shoe's midsole lifespan at 700km by
   default, scaled down for body weight above a 70kg reference (self-
   reported, optional — same "Strava doesn't expose this" reasoning as
   birth date, see above; account page has a "Body weight" field), and a
   bike's chain-wear mileage at a flat 3000km. 85%+ of that threshold is
   flagged "nearing replacement", 100%+ "replace soon", matching the
-  original spec's 85% figure.
+  original spec's 85% figure. The list sorts by mileage, so whatever
+  needs replacing soonest sits at the top of the sidebar.
 - Flagged gear gets a **"Shop replacement options"** link — a plain
   Google Shopping search built from the gear's brand/model, opened in a
   new tab. This is deliberately informational only: no affiliate

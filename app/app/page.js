@@ -10,19 +10,6 @@ const ERROR_MESSAGES = {
   access_denied: "Strava access wasn't granted, so there's nothing to import yet.",
 };
 
-async function mapWithConcurrency(items, limit, fn) {
-  const results = new Array(items.length);
-  let next = 0;
-  async function worker() {
-    while (next < items.length) {
-      const i = next++;
-      results[i] = await fn(items[i], i);
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return results;
-}
-
 export default function Dashboard() {
   const router = useRouter();
   const [me, setMe] = useState(null); // null = loading
@@ -38,7 +25,8 @@ export default function Dashboard() {
   const [importProgress, setImportProgress] = useState(0);
 
   const [activities, setActivities] = useState([]);
-  const [previews, setPreviews] = useState({});
+  const [summaryPreview, setSummaryPreview] = useState(null);
+  const [summarySaving, setSummarySaving] = useState(false);
   const [insights, setInsights] = useState(null);
   const [refreshingAi, setRefreshingAi] = useState(false);
   const [equipment, setEquipment] = useState(null);
@@ -134,7 +122,7 @@ export default function Dashboard() {
     setActivities(actData.activities || []);
     setInsights(insData);
     setEquipment(equipRes.ok ? await equipRes.json() : null);
-    await loadPreviews(actData.activities || [], theme, units);
+    if ((actData.activities || []).length > 0) await loadSummaryPreview(theme, units);
   }
 
   async function refreshAiInsights() {
@@ -148,44 +136,49 @@ export default function Dashboard() {
     }
   }
 
-  async function loadPreviews(list, themeArg, unitsArg) {
-    const entries = await mapWithConcurrency(list, 4, async (a) => {
-      const res = await fetch("/api/overlay", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ activity_id: a.id, theme: themeArg, units: unitsArg, format: "svg" }),
-      });
-      if (!res.ok) return [a.id, null];
-      const svgText = await res.text();
-      return [a.id, URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" }))];
+  async function loadSummaryPreview(themeArg, unitsArg) {
+    const res = await fetch("/api/telemetry-summary", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ theme: themeArg, units: unitsArg, format: "svg" }),
     });
-    setPreviews(Object.fromEntries(entries));
+    if (!res.ok) {
+      setSummaryPreview(null);
+      return;
+    }
+    const svgText = await res.text();
+    setSummaryPreview(URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" })));
   }
 
   function changeTheme(next) {
     setTheme(next);
-    loadPreviews(activities, next, units);
+    loadSummaryPreview(next, units);
   }
   function changeUnits(next) {
     setUnits(next);
-    loadPreviews(activities, theme, next);
+    loadSummaryPreview(theme, next);
   }
 
-  async function savePng(activityId, name) {
-    const res = await fetch("/api/overlay", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ activity_id: activityId, theme, units, format: "png" }),
-    });
-    if (!res.ok) return;
-    const blob = await res.blob();
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `splitline-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}.png`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
+  async function saveSummaryImage() {
+    setSummarySaving(true);
+    try {
+      const res = await fetch("/api/telemetry-summary", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ theme, units, format: "png" }),
+      });
+      if (!res.ok) return;
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "splitline-training-summary.png";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+    } finally {
+      setSummarySaving(false);
+    }
   }
 
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
@@ -395,10 +388,12 @@ export default function Dashboard() {
             <div className="panel">
               <h2 style={{ margin: 0 }}>Telemetry overlays</h2>
               <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
-                A cockpit-readout card for each of your last {activities.length} activities — pace, power, heart rate,
-                and the trace itself, styled from your own numbers. Save one and post it straight to your Strava feed.
+                One infographic for your last {activities.length} activities — total training time across the
+                period, a fatigue read on how recently and how hard you've been training, and an intensity trend
+                across the period. Weather/humidity aren't shown — Strava only occasionally records a device
+                temperature, and there's no live weather source wired up.
               </div>
-              <div className="toggle-group" style={{ marginBottom: 4 }}>
+              <div className="toggle-group" style={{ marginBottom: 12 }}>
                 {["ink", "paper", "signal"].map((k) => (
                   <div key={k} className={`toggle${theme === k ? " active" : ""}`} onClick={() => changeTheme(k)}>
                     {k[0].toUpperCase() + k.slice(1)}
@@ -415,20 +410,14 @@ export default function Dashboard() {
                   Re-sync
                 </button>
               </div>
-            </div>
-
-            <div className="gallery">
-              {activities.map((a) => (
-                <div key={a.id} className="gallery-card">
-                  {previews[a.id] ? <img src={previews[a.id]} alt={a.name} /> : <div className="status-line">Rendering…</div>}
-                  <div className="gallery-card-footer">
-                    <span>{a.name}</span>
-                    <button style={{ width: "auto", padding: "6px 12px" }} onClick={() => savePng(a.id, a.name)}>
-                      Save PNG
-                    </button>
-                  </div>
-                </div>
-              ))}
+              {summaryPreview ? (
+                <img src={summaryPreview} alt="Training summary infographic" style={{ width: "100%", height: "auto", display: "block", borderRadius: "var(--radius)" }} />
+              ) : (
+                <div className="status-line">Rendering…</div>
+              )}
+              <button style={{ width: "auto", padding: "7px 14px", marginTop: 12 }} onClick={saveSummaryImage} disabled={summarySaving || !summaryPreview}>
+                {summarySaving ? "Saving…" : "Save as image"}
+              </button>
             </div>
           </div>
 

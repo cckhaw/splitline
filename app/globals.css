@@ -237,11 +237,6 @@ input::placeholder { color: var(--ink-dim); }
 .pace-time { font-family: var(--font-mono); font-size: calc(19px * var(--fs-scale, 1)); font-weight: 600; color: var(--ink); margin-top: 4px; }
 @media (max-width: 600px) { .pace-grid { grid-template-columns: repeat(2, 1fr); } }
 
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; margin-top: 18px; }
-.gallery-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.gallery-card img { width: 100%; display: block; }
-.gallery-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; font-size: calc(12.5px * var(--fs-scale, 1)); }
-.gallery-card-footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* account nav */
 header.top nav.navlinks { gap: 14px; }

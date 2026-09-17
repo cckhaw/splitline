@@ -134,10 +134,12 @@ CREATE TABLE IF NOT EXISTS activities (
   calories DOUBLE PRECISION,
   trace JSONB,
   gear_id TEXT,                 -- Strava gear id (shoe/bike) used on this activity, if any
+  avg_temp_c DOUBLE PRECISION,   -- device-recorded temperature (Strava's average_temp), NOT weather-API data — absent for most activities
   imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   UNIQUE (user_id, strava_activity_id)
 );
 ALTER TABLE activities ADD COLUMN IF NOT EXISTS gear_id TEXT;
+ALTER TABLE activities ADD COLUMN IF NOT EXISTS avg_temp_c DOUBLE PRECISION;
 
 CREATE INDEX IF NOT EXISTS idx_activities_user_date ON activities (user_id, start_date DESC);
 
