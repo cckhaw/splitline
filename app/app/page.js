@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import UserMenu from "@/components/UserMenu";
+import AppHeader from "@/components/AppHeader";
 
 const ERROR_MESSAGES = {
   state_mismatch: "That connection attempt looked tampered with — try connecting again.",
@@ -237,12 +237,7 @@ export default function Dashboard() {
 
   return (
     <div className="shell">
-      <header className="top">
-        <div className="wordmark">SPLIT<span>LINE</span></div>
-        <nav className="navlinks">
-          <UserMenu name={me.name || me.email} tier={me.tier} />
-        </nav>
-      </header>
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
 
       {status && <div className={`status-line${statusWarn ? " warn" : ""}`} style={{ marginBottom: 16 }}>{status}</div>}
 

@@ -13,7 +13,7 @@ const TIER_LABELS = { free: "Free", plus: "Plus", pro: "Pro" };
 // name (with their membership tier) opens a dropdown with the rest of
 // the account-level navigation, instead of spreading those links flat
 // across the header.
-export default function UserMenu({ name, tier }) {
+export default function UserMenu({ name, tier, isTrial }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(null);
@@ -63,15 +63,15 @@ export default function UserMenu({ name, tier }) {
   }
 
   const tierLabel = TIER_LABELS[tier] || TIER_LABELS.free;
+  const tierSuffix = isTrial ? " - Trial" : "";
 
   return (
     <div className="user-menu" ref={ref}>
       <button type="button" className="user-menu-trigger" onClick={() => setOpen((o) => !o)}>
-        {name} <span className="user-menu-tier">({tierLabel} Tier)</span> <span className="caret">{open ? "▴" : "▾"}</span>
+        {name} <span className="user-menu-tier">({tierLabel} Tier{tierSuffix})</span> <span className="caret">{open ? "▴" : "▾"}</span>
       </button>
       {open && (
         <div className="user-menu-dropdown">
-          <Link href="/training-plan" onClick={() => setOpen(false)}>Training plan</Link>
           <Link href="/account" onClick={() => setOpen(false)}>My account</Link>
           {theme && (
             <div className="user-menu-item" onClick={toggleTheme}>{theme === "light" ? "Dark mode" : "Light mode"}</div>

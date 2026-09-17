@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import ThemeToggle from "@/components/ThemeToggle";
+import AppHeader from "@/components/AppHeader";
 import { PLANS, formatUsd } from "@/lib/pricing";
 import { TIERS } from "@/lib/membership";
 
@@ -218,13 +217,7 @@ export default function AccountPage() {
 
   return (
     <div className="shell">
-      <header className="top">
-        <div className="wordmark">SPLIT<span>LINE</span></div>
-        <nav className="navlinks">
-          <Link href="/app">Dashboard</Link>
-          <ThemeToggle />
-        </nav>
-      </header>
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>My account</h2>
 
@@ -232,10 +225,14 @@ export default function AccountPage() {
         <h2>Membership</h2>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <span className={`tier-badge tier-${me.tier}`}>{TIERS[me.tier]?.label || "Free"} Tier</span>
+            <span className={`tier-badge tier-${me.tier}`}>
+              {TIERS[me.tier]?.label || "Free"} Tier{me.isTrial ? " - Trial" : ""}
+            </span>
             {me.tier !== "free" && me.tierExpiresAt && (
               <div className="hint" style={{ marginTop: 8 }}>
-                {new Date(me.tierExpiresAt) > new Date() ? "Renews" : "Expired"} on {formatDate(me.tierExpiresAt)}
+                {new Date(me.tierExpiresAt) > new Date()
+                  ? (me.isTrial ? "Trial ends" : "Renews")
+                  : (me.isTrial ? "Trial ended" : "Expired")} on {formatDate(me.tierExpiresAt)}
               </div>
             )}
             <div className="hint" style={{ marginTop: 8 }}>

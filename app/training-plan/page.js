@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import ThemeToggle from "@/components/ThemeToggle";
+import AppHeader from "@/components/AppHeader";
 import { EVENT_TYPES, DISTANCE_OPTIONS, GOAL_TIME_OPTIONS } from "@/lib/eventTypes";
 import { buildProgressChartSvg } from "@/lib/progressChart";
 import { resolveTheme } from "@/lib/theme";
@@ -157,13 +156,7 @@ export default function TrainingPlanPage() {
 
   return (
     <div className="shell">
-      <header className="top">
-        <div className="wordmark">SPLIT<span>LINE</span></div>
-        <nav className="navlinks">
-          <Link href="/app">Dashboard</Link>
-          <ThemeToggle />
-        </nav>
-      </header>
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>Training plan</h2>
 
