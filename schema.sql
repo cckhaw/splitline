@@ -5,8 +5,44 @@
 CREATE TABLE IF NOT EXISTS users (
   id SERIAL PRIMARY KEY,
   email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,             -- NULL for accounts created via Google sign-in
+  name TEXT,
+  email_verified BOOLEAN NOT NULL DEFAULT false,
+  google_id TEXT UNIQUE,
+  birth_date DATE,                -- self-reported; Strava's API does not expose date of birth
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Migrations for databases created before these columns existed.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS name TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email_verified BOOLEAN NOT NULL DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_id TEXT UNIQUE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS birth_date DATE;
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+
+-- Six-digit codes emailed for signup verification and email-change
+-- confirmation. Codes are stored hashed (sha256), never in plaintext.
+CREATE TABLE IF NOT EXISTS verification_codes (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL,       -- 'signup_email' | 'change_email'
+  code_hash TEXT NOT NULL,
+  new_email TEXT,              -- target address for 'change_email'; NULL otherwise
+  attempts INTEGER NOT NULL DEFAULT 0,
+  expires_at TIMESTAMPTZ NOT NULL,
+  consumed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_verification_codes_user ON verification_codes (user_id, purpose, created_at DESC);
+
+-- Cached AI-generated injury-risk / recovery / nutrition analysis, keyed
+-- by a hash of the inputs so the LLM is only called again when the
+-- athlete's recent activities (or profile) actually change.
+CREATE TABLE IF NOT EXISTS ai_insights (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  input_hash TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS strava_connections (

@@ -9,8 +9,11 @@ export async function POST(request) {
   const { email, password } = await request.json().catch(() => ({}));
   const user = await getUserByEmail(email || "");
 
-  if (!user || !(await bcrypt.compare(password || "", user.password_hash))) {
+  if (!user || !user.password_hash || !(await bcrypt.compare(password || "", user.password_hash))) {
     return NextResponse.json({ error: "invalid_credentials", message: "Wrong email or password." }, { status: 401 });
+  }
+  if (!user.email_verified) {
+    return NextResponse.json({ error: "email_unverified", message: "Verify your email before logging in.", email: user.email }, { status: 403 });
   }
 
   const token = await createSession(user.id);
