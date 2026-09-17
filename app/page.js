@@ -1,4 +1,5 @@
 import Link from "next/link";
+import ThemeToggle from "@/components/ThemeToggle";
 
 export default function Home() {
   return (
@@ -6,6 +7,7 @@ export default function Home() {
       <header className="top">
         <div className="wordmark">SPLIT<span>LINE</span></div>
         <nav className="navlinks">
+          <ThemeToggle />
           <Link href="/login">Log in</Link>
           <Link href="/signup">
             <button className="primary navcta">Sign up free</button>

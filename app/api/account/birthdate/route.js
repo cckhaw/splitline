@@ -1,8 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
 import { updateUserBirthDate } from "@/lib/db";
+import { ageFromBirthDate } from "@/lib/insights";
 
 export const runtime = "nodejs";
+
+const MIN_AGE = 13; // same floor enforced at signup — see app/api/auth/signup/route.js
 
 // Self-reported date of birth — Strava's public API doesn't expose this,
 // so it's the only way the injury-risk estimate can factor in age.
@@ -18,6 +21,9 @@ export async function POST(request) {
   const now = new Date();
   if (Number.isNaN(parsed.getTime()) || parsed > now || now.getFullYear() - parsed.getFullYear() > 120) {
     return NextResponse.json({ error: "invalid_date", message: "Enter a valid date of birth." }, { status: 400 });
+  }
+  if (ageFromBirthDate(birthDate, now) < MIN_AGE) {
+    return NextResponse.json({ error: "too_young", message: `Splitline accounts require an age of at least ${MIN_AGE}.` }, { status: 403 });
   }
 
   await updateUserBirthDate(session.userId, birthDate);

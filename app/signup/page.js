@@ -3,11 +3,25 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import ThemeToggle from "@/components/ThemeToggle";
+
+const MIN_SIGNUP_AGE = 13;
+
+function calcAge(birthDate) {
+  if (!birthDate) return null;
+  const b = new Date(birthDate);
+  const now = new Date();
+  let age = now.getFullYear() - b.getFullYear();
+  const hadBirthday = now.getMonth() > b.getMonth() || (now.getMonth() === b.getMonth() && now.getDate() >= b.getDate());
+  if (!hadBirthday) age--;
+  return age;
+}
 
 export default function SignupPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
+  const [birthDate, setBirthDate] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
@@ -30,12 +44,19 @@ export default function SignupPage() {
   async function handleSubmit(e) {
     e.preventDefault();
     setError("");
+
+    const age = calcAge(birthDate);
+    if (age == null || age < MIN_SIGNUP_AGE) {
+      setError(`You must be at least ${MIN_SIGNUP_AGE} years old to create a Splitline account.`);
+      return;
+    }
+
     setLoading(true);
     try {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, email, password, confirmPassword }),
+        body: JSON.stringify({ name, email, password, confirmPassword, birthDate }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Couldn't create that account.");
@@ -81,7 +102,10 @@ export default function SignupPage() {
   if (awaitingCode) {
     return (
       <div className="shell narrow">
-        <div className="wordmark" style={{ marginBottom: 28 }}>SPLIT<span>LINE</span></div>
+        <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
+          <div className="wordmark">SPLIT<span>LINE</span></div>
+          <ThemeToggle />
+        </div>
         <div className="panel">
           <h2>Check your email</h2>
           <div className="hint" style={{ marginTop: -8, marginBottom: 14 }}>
@@ -113,7 +137,10 @@ export default function SignupPage() {
 
   return (
     <div className="shell narrow">
-      <div className="wordmark" style={{ marginBottom: 28 }}>SPLIT<span>LINE</span></div>
+      <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
+        <div className="wordmark">SPLIT<span>LINE</span></div>
+        <ThemeToggle />
+      </div>
       <div className="panel">
         <h2>Create your account</h2>
         <a href="/api/auth/google">
@@ -125,6 +152,11 @@ export default function SignupPage() {
           <input required value={name} onChange={(e) => setName(e.target.value)} />
           <label>Email</label>
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+          <label>Date of birth</label>
+          <input type="date" required value={birthDate} onChange={(e) => setBirthDate(e.target.value)} max={new Date().toISOString().slice(0, 10)} />
+          {birthDate && calcAge(birthDate) < MIN_SIGNUP_AGE && (
+            <div className="status-line warn">You must be at least {MIN_SIGNUP_AGE} to sign up.</div>
+          )}
           <label>Password</label>
           <input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
           <label>Confirm password</label>

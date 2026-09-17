@@ -45,6 +45,27 @@ CREATE TABLE IF NOT EXISTS ai_insights (
   generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- A user's current upcoming-event goal. One row per user: setting a new
+-- event replaces the old one (and the cached plan below along with it).
+CREATE TABLE IF NOT EXISTS race_goals (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,      -- 'running' | 'duathlon' | 'triathlon'
+  event_name TEXT,
+  event_date DATE NOT NULL,
+  target_distance TEXT,          -- free-text, e.g. "10K", "Olympic distance"
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Cached AI-generated progressive training plan for the current goal
+-- above, keyed by a hash of the inputs (goal + activity summary) so the
+-- LLM is only called again when either actually changes.
+CREATE TABLE IF NOT EXISTS training_plans (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  input_hash TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS strava_connections (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   strava_athlete_id BIGINT,

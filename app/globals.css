@@ -1,4 +1,4 @@
-:root {
+:root, :root[data-theme="dark"] {
   --bg: #0E1420;
   --bg-raised: #161D2C;
   --line: #2A3347;
@@ -10,10 +10,24 @@
   --radius: 3px;
   --font-head: 'Space Grotesk', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
+  color-scheme: dark;
+}
+/* Light mode — reuses the same warm-paper palette as the "paper" overlay
+   card theme, so the brand reads consistently across both surfaces. */
+:root[data-theme="light"] {
+  --bg: #F3EEE2;
+  --bg-raised: #FCFAF4;
+  --line: rgba(23,21,18,0.16);
+  --ink: #171512;
+  --ink-dim: #6B6558;
+  --amber: #C97B2E;
+  --teal: #2E6B65;
+  --coral: #B8503D;
+  color-scheme: light;
 }
 * { box-sizing: border-box; }
 html, body { margin: 0; background: var(--bg); color: var(--ink); }
-body { font-family: var(--font-head); -webkit-font-smoothing: antialiased; min-height: 100vh; }
+body { font-family: var(--font-head); -webkit-font-smoothing: antialiased; min-height: 100vh; transition: background 0.15s ease, color 0.15s ease; }
 
 .shell { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
 header.top { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
@@ -149,3 +163,15 @@ header.top nav.navlinks .tagline { text-align: left; max-width: none; }
 .ai-columns ul { margin: 0; padding-left: 18px; font-size: 13px; line-height: 1.6; color: var(--ink); }
 .ai-columns li { margin-bottom: 6px; }
 @media (max-width: 860px) { .ai-columns { grid-template-columns: 1fr; } }
+
+/* training plan */
+h3 { font-size: 12.5px; font-weight: 500; color: var(--ink-dim); margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.03em; }
+.phase-list { display: flex; flex-direction: column; gap: 12px; margin-top: 4px; }
+.phase-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px 16px; }
+.phase-card .phase-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; }
+.phase-card h4 { margin: 0; font-size: 16px; font-weight: 500; color: var(--ink); }
+.phase-card .weeks { font-family: var(--font-mono); font-size: 12.5px; color: var(--ink-dim); white-space: nowrap; }
+.phase-card .focus { font-size: 13.5px; color: var(--ink-dim); margin-top: 6px; }
+.phase-card .volume { font-size: 13px; color: var(--ink); margin-top: 8px; }
+.phase-card ul { margin: 8px 0 0; padding-left: 18px; font-size: 13px; color: var(--ink); line-height: 1.6; }
+.phase-card li { margin-bottom: 4px; }

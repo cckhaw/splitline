@@ -147,12 +147,17 @@ panel. Both are reasonable v2 directions, not implied by what's here.
 
 ## Accounts: signup, Google login, and the account page
 
-Signup collects full name, email, password, and password confirmation,
-then emails a 6-digit code (via Resend — see env vars above) that has to
-be entered before the account can log in. "Continue with Google" is
-available on both the signup and login pages; a Google sign-in is
-email-verified automatically (Google already confirmed it) and links to
-an existing password-based account with the same email if one exists.
+Signup collects full name, email, date of birth, password, and password
+confirmation, then emails a 6-digit code (via Resend — see env vars
+above) that has to be entered before the account can log in. Accounts
+require an age of 13 or older — signup is rejected server-side (not just
+in the UI) for anyone younger. "Continue with Google" is available on
+both the signup and login pages; a Google sign-in is email-verified
+automatically (Google already confirmed it) and links to an existing
+password-based account with the same email if one exists. Google's basic
+profile scope doesn't include date of birth, so the age check can't run
+at that point — new Google sign-ups are instead sent to the account page
+with a prompt to confirm their date of birth there (also enforced at 13+).
 
 Logged-in users get a **My account** page (linked from the dashboard
 header) to change their name, email (also re-verified by code, sent to
@@ -186,6 +191,47 @@ Results are cached per user (`ai_insights` table) and only regenerated
 when the underlying activity summary actually changes, or when the
 dashboard's "Refresh AI analysis" button is clicked — the model isn't
 called on every page load.
+
+## Light/dark appearance
+
+A theme toggle (`components/ThemeToggle.js`) appears in the header of
+every page. It writes `data-theme` on `<html>` and persists the choice to
+`localStorage` — there's no server-side account setting for it, so it's
+per-browser, not per-account. An inline script in `app/layout.js` applies
+the stored theme before first paint to avoid a flash of the wrong colors;
+that script intentionally runs before React hydrates, which is why
+`<html>` carries `suppressHydrationWarning`. Light mode reuses the same
+warm-paper palette as the "paper" overlay card theme, so the brand stays
+consistent across both surfaces.
+
+## Exporting the prediction and injury panels as social images
+
+Both the "Training load & race pace" panel and the "Injury risk, recovery
+& nutrition" panel have a portrait/landscape toggle and an "Export image"
+button. This hits `/api/insights/export`, which rebuilds the panel as a
+standalone SVG card (`lib/insightCard.js` — same visual language as the
+per-activity overlay in `lib/svg.js`) and rasterizes it to PNG with
+`@resvg/resvg-js`, the same library the activity overlays already use.
+The injury card renders from whatever AI analysis is currently cached, so
+generate or refresh that panel first if there isn't one yet.
+
+## Training plan for an upcoming event
+
+The dashboard's **Training plan** link takes an athlete to set one
+upcoming event — a running race, duathlon, or triathlon, with an optional
+name and target distance, and a date that has to be at least 4 weeks out
+(enforced server-side in `/api/event`, so there's room for a real
+progressive plan). Once set, `/api/training-plan` sends the same
+aggregated activity summary used by the injury-risk panel, plus the event
+type and exact weeks remaining, to Claude, which returns a periodized
+plan: 3-8 phases (e.g. Base/Build/Peak/Taper) spanning the full time to
+the event — grouped into phases rather than one entry per week, since
+that range can be a month or most of a year — plus recovery guidelines, a
+nutrition plan, final pre-race preparation (48-72h out), and a race-day
+strategy. Like the injury panel, the plan is cached (`training_plans`
+table) and only regenerated when the goal or the underlying activity data
+changes, or via the page's "Refresh plan" button. Setting a new event
+clears any previously cached plan.
 
 ## What's still simple on purpose (MVP tradeoffs)
 
