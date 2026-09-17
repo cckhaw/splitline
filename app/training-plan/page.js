@@ -42,6 +42,9 @@ export default function TrainingPlanPage() {
   const [goal, setGoal] = useState(null); // null = none set yet, undefined = loading
   const [plan, setPlan] = useState(null);
   const [planError, setPlanError] = useState("");
+  const [planLocked, setPlanLocked] = useState(false);
+  const [nextEligibleAt, setNextEligibleAt] = useState(null);
+  const [staleForDifferentGoal, setStaleForDifferentGoal] = useState(false);
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
 
@@ -106,6 +109,9 @@ export default function TrainingPlanPage() {
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't load the training plan.");
       setPlan(data.plan);
+      setPlanLocked(Boolean(data.locked));
+      setNextEligibleAt(data.nextEligibleAt || null);
+      setStaleForDifferentGoal(Boolean(data.staleForDifferentGoal));
       if (!data.plan && data.error) setPlanError(data.error);
     } catch (e) {
       setPlan(null);
@@ -159,7 +165,7 @@ export default function TrainingPlanPage() {
         </nav>
       </header>
 
-      <h2 style={{ fontSize: 20, color: "var(--ink)", marginBottom: 18 }}>Training plan</h2>
+      <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>Training plan</h2>
 
       {showForm && (
         <div className="panel">
@@ -220,12 +226,26 @@ export default function TrainingPlanPage() {
           <div className="panel">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
               <h2 style={{ margin: 0 }}>AI progressive training plan</h2>
-              <button style={{ width: "auto", padding: "6px 12px" }} onClick={() => loadPlan(true)} disabled={refreshing || loadingPlan}>
+              <button
+                style={{ width: "auto", padding: "6px 12px" }}
+                onClick={() => loadPlan(true)}
+                disabled={refreshing || loadingPlan || planLocked}
+                title={planLocked ? "Refresh limit reached for your tier" : undefined}
+              >
                 {refreshing ? "Regenerating…" : "Refresh plan"}
               </button>
             </div>
 
             {loadingPlan && <div className="hint" style={{ marginTop: 12 }}>Building your plan… this can take up to 30 seconds.</div>}
+
+            {planLocked && (
+              <div className="status-line warn" style={{ marginTop: 10 }}>
+                You&rsquo;ve used this tier&rsquo;s plan refresh for now
+                {nextEligibleAt ? ` — next one available ${new Date(nextEligibleAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : ""}.{" "}
+                {staleForDifferentGoal ? "Your event changed since the last plan, so a fresh one isn't ready yet. " : ""}
+                <a href="/account">Upgrade to Plus or Pro</a> for more frequent updates.
+              </div>
+            )}
 
             {!loadingPlan && plan && (
               <>
@@ -285,7 +305,7 @@ export default function TrainingPlanPage() {
               </>
             )}
 
-            {!loadingPlan && !plan && (
+            {!loadingPlan && !plan && !planLocked && (
               <div className="hint" style={{ marginTop: 12 }}>
                 {planError ? `Couldn't generate a training plan right now (${planError}).` : "No plan generated yet."}
               </div>

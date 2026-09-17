@@ -3,6 +3,7 @@ import bcrypt from "bcryptjs";
 import { createUser, getUserByEmail, updateUserName, updateUserPassword, updateUserBirthDate } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
 import { ageFromBirthDate } from "@/lib/insights";
+import { betaSignupTierGrant } from "@/lib/membership";
 
 export const runtime = "nodejs";
 
@@ -54,7 +55,7 @@ export async function POST(request) {
     await updateUserBirthDate(existing.id, birthDate);
     user = existing;
   } else {
-    user = await createUser(name.trim(), email, hash, { birthDate });
+    user = await createUser(name.trim(), email, hash, { birthDate, ...betaSignupTierGrant() });
   }
   await issueVerificationCode(user.id, "signup_email", user.email);
 

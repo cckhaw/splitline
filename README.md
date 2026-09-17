@@ -78,7 +78,9 @@ deletes everything it made. All five lines should print `✓`.
 | `RESEND_API_KEY` | from [resend.com](https://resend.com) — sends the signup/email-change verification codes. Without it, codes are just logged to the server console (fine for local dev, not for production). |
 | `EMAIL_FROM` | optional — the From address for those emails, e.g. `Splitline <noreply@yourdomain.com>` (must be a domain verified in Resend) |
 | `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional — from [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) (OAuth client ID, type "Web application", authorized redirect URI `https://your-domain/api/auth/google/callback`). Without these, the "Continue with Google" buttons redirect to an error instead of Google. |
-| `ANTHROPIC_API_KEY` | from [console.anthropic.com](https://console.anthropic.com) — powers the injury-risk/recovery/nutrition panel. Without it, that panel just shows "couldn't generate an AI analysis"; the rest of the app is unaffected. |
+| `ANTHROPIC_API_KEY` | from [console.anthropic.com](https://console.anthropic.com) — powers the injury-risk/recovery/nutrition panel and the training plan. Without it, those just show "couldn't generate"; the rest of the app is unaffected. |
+| `STRIPE_SECRET_KEY` | from the Stripe dashboard → Developers → API keys — powers Plus/Pro checkout and the billing portal. Without it, upgrade buttons return a clear "billing not configured" error; Free tier and everything else work fine. |
+| `STRIPE_WEBHOOK_SECRET` | from Stripe dashboard → Developers → Webhooks → your endpoint's "Signing secret", after pointing an endpoint at `/api/stripe/webhook` — see "Stripe billing" below for which events to subscribe it to. |
 
 ### 4. Push to Git, import into Vercel, deploy
 
@@ -322,6 +324,113 @@ training-plan generation times out consistently despite that, the Hobby
 plan's 10-second cap is the first thing to check — the richer plan this
 version generates makes that more likely to bite, not less.
 
+## Membership tiers, display font size, and billing
+
+### Free / Plus / Pro
+
+Every account starts on **Free**. The three tiers (`lib/membership.js`)
+don't gate *access* to a feature — they gate how often the two AI
+features (the injury/recovery/nutrition panel, the training plan) are
+allowed to actually call Claude, since that's the real cost driver in
+this app:
+
+| Tier | Price | AI refresh cadence |
+|---|---|---|
+| Free | $0 | once every 90 days |
+| Plus | $1.99/mo or $19.99/yr | once every 30 days |
+| Pro | $2.99/mo or $29.99/yr | unlimited |
+
+This is enforced server-side in `/api/insights` and `/api/training-plan`,
+not just displayed — see `lib/membership.js`'s `isRefreshEligible` /
+`nextEligibleDate`, backed by a new `ai_usage` table that records the
+last time each feature *actually generated* for a user, independent of
+whatever's currently cached. That last part matters: changing a
+training-plan goal deliberately does **not** delete the previous cached
+plan or reset the refresh clock (see the comment in `saveRaceGoal`,
+`lib/db.js`) — otherwise a free-tier user could bypass the 90-day limit
+just by re-entering their event. When the tier isn't eligible to
+regenerate and the cached plan is for a *different* goal than the
+current one, the API returns `plan: null` rather than showing a plan for
+the wrong race — `app/training-plan/page.js` and the dashboard's injury
+panel both surface a "locked" message with the next eligible date and an
+upgrade link when this happens.
+
+A user's tier is only ever the source of truth via
+`resolveEffectiveTier()` (`lib/membership.js`), never `user.tier`
+directly — a stored tier can be *lapsed* (a subscription period ended, a
+promo expired) without anything having written "free" back to the row
+yet, and that function is where expiry actually gets resolved, on every
+read. There's no cron job downgrading accounts; a `tier_expires_at` in
+the past just stops counting starting from the next request.
+
+### Display font size
+
+A +/-/reset control lives in the dashboard's hamburger menu
+(`components/UserMenu.js`) and writes a `--fs-scale` CSS custom property
+(`lib/fontSize.js` for the shared bounds/storage key), which every
+`font-size` declaration in `globals.css` is expressed as a `calc()`
+multiple of. Like the theme, it's applied before first paint by the
+inline script in `app/layout.js` (reading the same `localStorage` key) to
+avoid a resize flash, and persists per-browser, not per-account.
+
+### Stripe billing
+
+Upgrading (`/api/billing/checkout`) creates a Stripe Checkout Session
+with the price built **inline** via `price_data` rather than a
+pre-created Stripe Price object — `lib/pricing.js` is the only file that
+needs editing to change what athletes pay; nothing needs to stay in sync
+on the Stripe dashboard side. `allow_promotion_codes: true` is set on
+every session, so creating a seasonal discount is a Stripe-dashboard-only
+action (Coupons → create one, optionally scoped to a Promotion Code) —
+no code change needed. A "Manage billing" link
+(`/api/billing/portal`) opens Stripe's hosted Customer Portal for
+updating a payment method, viewing invoices, or canceling; deliberately
+*not* used for plan switching, since the portal's self-serve plan
+switcher needs pre-created Prices in a product catalog, which would
+conflict with pricing living entirely in code. Upgrades, renewals, and
+plan changes all go back through a fresh Checkout session instead — the
+account page's "Subscribe" buttons work for all three.
+
+`/api/stripe/webhook` verifies the signature (`STRIPE_WEBHOOK_SECRET`)
+and handles three event types: `checkout.session.completed` (grants the
+tier and sets `tier_expires_at` to the new subscription's period end),
+`invoice.payment_succeeded` (extends `tier_expires_at` on automatic
+recurring renewals — skipped for the invoice tied to the *initial*
+checkout, which the first event already handled), and
+`customer.subscription.deleted` (just detaches the dead subscription id;
+doesn't force an immediate downgrade, since `tier_expires_at` already
+reflects the paid-through date and `resolveEffectiveTier` naturally
+treats it as lapsed once that date passes). One thing worth knowing if
+you're extending this: recent Stripe API versions moved
+`current_period_end` off the top-level Subscription object onto each
+subscription item (`subscription.items.data[0].current_period_end`), and
+moved `invoice.subscription` to
+`invoice.parent.subscription_details.subscription` — both are easy to
+get wrong from memory/older examples, and the installed `stripe` npm
+package's own type definitions are the fastest way to check current
+field names before changing this code.
+
+**None of this has been tested against a real Stripe account** — there's
+no live key in this environment. The integration is written correctly
+against the installed SDK version's actual types (verified line by line,
+not from memory), but before going live: set `STRIPE_SECRET_KEY` and
+`STRIPE_WEBHOOK_SECRET` (from the Stripe dashboard's Developers →
+Webhooks, pointed at `/api/stripe/webhook`, subscribed to at least
+`checkout.session.completed`, `invoice.payment_succeeded`, and
+`customer.subscription.deleted`), and run an actual test-mode checkout
+end to end before trusting it with real cards.
+
+### Beta Pro trial
+
+New signups (both password and Google) are granted **Pro tier free for
+`BETA_PRO_TRIAL_DAYS` days** (`lib/membership.js`, currently 90) via the
+same `tier`/`tier_expires_at` mechanism as a paid subscription — there's
+no separate "trial" concept. Set that constant to `0` to turn the promo
+off for new signups; accounts already granted a trial keep whatever
+`tier_expires_at` they got, since expiry is resolved per-account, not
+globally. The home page's pricing section reads this same constant to
+show (or hide) the beta banner, so turning it off there is automatic too.
+
 ## What's still simple on purpose (MVP tradeoffs)
 
 - **No webhook / auto-import.** Someone has to click Import (or
@@ -329,6 +438,24 @@ version generates makes that more likely to bite, not less.
 - **No self-service password reset** (see above) — signup/login/email
   verification/Google sign-in are all there, but a locked-out user with
   no working password currently has no recovery flow of their own.
+- **Stripe billing is untested against a live account.** The checkout,
+  portal, and webhook code is complete and was checked against the
+  installed `stripe` SDK's own type definitions (catching two real
+  field-name changes along the way — see the billing section above),
+  but no test-mode Stripe keys were available in this environment, so
+  none of it has been exercised against Stripe's actual API. Run a
+  real test-mode checkout before trusting it with payments.
+- **No proration on plan switches.** Each "Subscribe" click starts a
+  fresh Checkout Session; Stripe treats it as a new subscription
+  rather than modifying/prorating an existing one in place. A user
+  switching Plus → Pro (or monthly → yearly) ends up with two
+  subscriptions unless the old one is cancelled first via the billing
+  portal.
+- **No dunning / `past_due` handling.** The webhook only reacts to
+  `checkout.session.completed`, `invoice.payment_succeeded`, and
+  `customer.subscription.deleted` — a failed renewal charge doesn't
+  currently downgrade the user or prompt them to update their card
+  until the subscription is fully cancelled.
 
 ## Local development
 

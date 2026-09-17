@@ -240,7 +240,7 @@ export default function Dashboard() {
       <header className="top">
         <div className="wordmark">SPLIT<span>LINE</span></div>
         <nav className="navlinks">
-          <UserMenu name={me.name || me.email} />
+          <UserMenu name={me.name || me.email} tier={me.tier} />
         </nav>
       </header>
 
@@ -339,7 +339,8 @@ export default function Dashboard() {
             <button
               style={{ width: "auto", padding: "6px 12px" }}
               onClick={refreshAiInsights}
-              disabled={refreshingAi}
+              disabled={refreshingAi || insights.aiLocked}
+              title={insights.aiLocked ? "Refresh limit reached for your tier" : undefined}
             >
               {refreshingAi ? "Analyzing…" : "Refresh AI analysis"}
             </button>
@@ -349,6 +350,14 @@ export default function Dashboard() {
             <div className="hint" style={{ marginTop: 10 }}>
               Strava doesn&rsquo;t share date of birth, so this estimate doesn&rsquo;t know your age yet.{" "}
               <a href="/account">Add your date of birth</a> in My account for a sharper read.
+            </div>
+          )}
+
+          {insights.aiLocked && (
+            <div className="status-line warn" style={{ marginTop: 10 }}>
+              You&rsquo;ve used this tier&rsquo;s AI refresh for now
+              {insights.nextEligibleAt ? ` — next one available ${new Date(insights.nextEligibleAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : ""}.{" "}
+              <a href="/account">Upgrade to Plus or Pro</a> for more frequent updates.
             </div>
           )}
 

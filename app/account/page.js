@@ -4,10 +4,21 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
+import { PLANS, formatUsd } from "@/lib/pricing";
+import { TIERS } from "@/lib/membership";
+
+function formatDate(d) {
+  return new Date(d).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+}
 
 export default function AccountPage() {
   const router = useRouter();
   const [me, setMe] = useState(null);
+
+  const [checkoutStatus, setCheckoutStatus] = useState("");
+  const [checkoutWarn, setCheckoutWarn] = useState(false);
+  const [checkoutLoading, setCheckoutLoading] = useState(null); // `${tier}-${interval}` while in flight
+  const [portalLoading, setPortalLoading] = useState(false);
 
   const [name, setName] = useState("");
   const [nameStatus, setNameStatus] = useState("");
@@ -36,8 +47,16 @@ export default function AccountPage() {
     const params = new URLSearchParams(window.location.search);
     if (params.get("prompt") === "birthdate") {
       setPromptBirthdate(true);
-      window.history.replaceState({}, "", "/account");
     }
+    const checkout = params.get("checkout");
+    if (checkout === "success") {
+      setCheckoutStatus("Subscription updated — thanks for upgrading!");
+    } else if (checkout === "cancelled") {
+      setCheckoutWarn(true);
+      setCheckoutStatus("Checkout was cancelled — no changes were made.");
+    }
+    if (params.get("prompt") || checkout) window.history.replaceState({}, "", "/account");
+
     fetch("/api/me").then((r) => r.json()).then((data) => {
       if (!data.authenticated) { router.push("/login"); return; }
       setMe(data);
@@ -45,6 +64,42 @@ export default function AccountPage() {
       setBirthDate(data.birthDate ? String(data.birthDate).slice(0, 10) : "");
     });
   }, [router]);
+
+  async function startCheckout(tier, interval) {
+    setCheckoutLoading(`${tier}-${interval}`);
+    setCheckoutWarn(false);
+    setCheckoutStatus("");
+    try {
+      const res = await fetch("/api/billing/checkout", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tier, interval }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Couldn't start checkout.");
+      window.location.href = data.url;
+    } catch (e) {
+      setCheckoutWarn(true);
+      setCheckoutStatus(e.message);
+      setCheckoutLoading(null);
+    }
+  }
+
+  async function openBillingPortal() {
+    setPortalLoading(true);
+    setCheckoutWarn(false);
+    setCheckoutStatus("");
+    try {
+      const res = await fetch("/api/billing/portal", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Couldn't open the billing portal.");
+      window.location.href = data.url;
+    } catch (e) {
+      setCheckoutWarn(true);
+      setCheckoutStatus(e.message);
+      setPortalLoading(false);
+    }
+  }
 
   async function saveName(e) {
     e.preventDefault();
@@ -171,7 +226,63 @@ export default function AccountPage() {
         </nav>
       </header>
 
-      <h2 style={{ fontSize: 20, color: "var(--ink)", marginBottom: 18 }}>My account</h2>
+      <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>My account</h2>
+
+      <div className="panel">
+        <h2>Membership</h2>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", flexWrap: "wrap", gap: 12 }}>
+          <div>
+            <span className={`tier-badge tier-${me.tier}`}>{TIERS[me.tier]?.label || "Free"} Tier</span>
+            {me.tier !== "free" && me.tierExpiresAt && (
+              <div className="hint" style={{ marginTop: 8 }}>
+                {new Date(me.tierExpiresAt) > new Date() ? "Renews" : "Expired"} on {formatDate(me.tierExpiresAt)}
+              </div>
+            )}
+            <div className="hint" style={{ marginTop: 8 }}>
+              AI refresh cadence: {TIERS[me.tier]?.refreshIntervalDays > 0 ? `once every ${TIERS[me.tier].refreshIntervalDays} days` : "unlimited"}.
+            </div>
+          </div>
+          {me.hasStripeCustomer && (
+            <button style={{ width: "auto", padding: "8px 16px" }} onClick={openBillingPortal} disabled={portalLoading}>
+              {portalLoading ? "Opening…" : "Manage billing"}
+            </button>
+          )}
+        </div>
+
+        {checkoutStatus && <div className={`status-line${checkoutWarn ? " warn" : ""}`}>{checkoutStatus}</div>}
+
+        <div className="plan-grid">
+          {Object.values(PLANS).map((plan) => (
+            <div key={plan.tier} className="plan-card">
+              <h3 style={{ fontSize: "calc(15px * var(--fs-scale, 1))", color: "var(--ink)", textTransform: "none", letterSpacing: 0 }}>{plan.label}</h3>
+              <div className="hint" style={{ marginTop: 0 }}>{plan.tagline}</div>
+              <div className="plan-price">
+                {formatUsd(plan.monthly.amountCents)}<span>/month</span>
+              </div>
+              <div className="hint" style={{ marginTop: 0 }}>or {formatUsd(plan.yearly.amountCents)}/year</div>
+              <button
+                className="primary"
+                style={{ marginTop: 14 }}
+                disabled={Boolean(checkoutLoading)}
+                onClick={() => startCheckout(plan.tier, "month")}
+              >
+                {checkoutLoading === `${plan.tier}-month` ? "Redirecting…" : `Subscribe monthly`}
+              </button>
+              <button
+                style={{ marginTop: 8 }}
+                disabled={Boolean(checkoutLoading)}
+                onClick={() => startCheckout(plan.tier, "year")}
+              >
+                {checkoutLoading === `${plan.tier}-year` ? "Redirecting…" : `Subscribe yearly`}
+              </button>
+            </div>
+          ))}
+        </div>
+        <div className="hint" style={{ marginTop: 16 }}>
+          Already subscribed and want to renew, extend, or switch plans? Pick a plan above to check out again — it
+          replaces your current subscription. Have a promo code? There&rsquo;s a field for it at checkout.
+        </div>
+      </div>
 
       <div className="panel">
         <h2>Full name</h2>
