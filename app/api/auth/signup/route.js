@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
-import { createUser, getUserByEmail, updateUserName, updateUserPassword, updateUserBirthDate } from "@/lib/db";
+import { createUser, getUserByEmail, updateUserName, updateUserPassword, updateUserBirthDate, friendlyDbErrorMessage } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
 import { ageFromBirthDate } from "@/lib/insights";
 import { betaSignupTierGrant } from "@/lib/membership";
@@ -41,23 +41,28 @@ export async function POST(request) {
     );
   }
 
-  const existing = await getUserByEmail(email);
-  if (existing && existing.email_verified) {
-    return NextResponse.json({ error: "email_taken", message: "An account with that email already exists." }, { status: 409 });
-  }
+  try {
+    const existing = await getUserByEmail(email);
+    if (existing && existing.email_verified) {
+      return NextResponse.json({ error: "email_taken", message: "An account with that email already exists." }, { status: 409 });
+    }
 
-  const hash = await bcrypt.hash(password, 10);
-  let user;
-  if (existing) {
-    // Unverified account from a previous, abandoned signup attempt — pick it back up.
-    await updateUserName(existing.id, name.trim());
-    await updateUserPassword(existing.id, hash);
-    await updateUserBirthDate(existing.id, birthDate);
-    user = existing;
-  } else {
-    user = await createUser(name.trim(), email, hash, { birthDate, ...betaSignupTierGrant() });
-  }
-  await issueVerificationCode(user.id, "signup_email", user.email);
+    const hash = await bcrypt.hash(password, 10);
+    let user;
+    if (existing) {
+      // Unverified account from a previous, abandoned signup attempt — pick it back up.
+      await updateUserName(existing.id, name.trim());
+      await updateUserPassword(existing.id, hash);
+      await updateUserBirthDate(existing.id, birthDate);
+      user = existing;
+    } else {
+      user = await createUser(name.trim(), email, hash, { birthDate, ...betaSignupTierGrant() });
+    }
+    await issueVerificationCode(user.id, "signup_email", user.email);
 
-  return NextResponse.json({ ok: true, needsVerification: true, email: user.email });
+    return NextResponse.json({ ok: true, needsVerification: true, email: user.email });
+  } catch (e) {
+    console.error("Signup failed:", e);
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
+  }
 }

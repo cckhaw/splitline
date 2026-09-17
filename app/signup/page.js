@@ -7,6 +7,22 @@ import ThemeToggle from "@/components/ThemeToggle";
 
 const MIN_SIGNUP_AGE = 13;
 
+// A response can come back with an empty or non-JSON body — a platform
+// timeout, a proxy error page, a crashed function — and calling res.json()
+// directly on that throws a raw "Unexpected end of JSON input" that isn't
+// useful to show anyone. This parses defensively and always returns a message.
+async function safeJson(res) {
+  const text = await res.text();
+  if (!text) {
+    return { message: res.ok ? "The server returned an empty response." : `Server error (${res.status}).` };
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { message: `Unexpected response from the server (${res.status}).` };
+  }
+}
+
 function calcAge(birthDate) {
   if (!birthDate) return null;
   const b = new Date(birthDate);
@@ -58,7 +74,7 @@ export default function SignupPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ name, email, password, confirmPassword, birthDate }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't create that account.");
       setAwaitingCode(true);
     } catch (e) {
@@ -78,7 +94,7 @@ export default function SignupPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ email, code }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't verify that code.");
       router.push("/app");
     } catch (e) {

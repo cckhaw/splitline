@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUserByEmail, setEmailVerified } from "@/lib/db";
+import { getUserByEmail, setEmailVerified, friendlyDbErrorMessage } from "@/lib/db";
 import { checkVerificationCode } from "@/lib/verification";
 import { createSession, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
 
@@ -17,21 +17,27 @@ const ERROR_MESSAGES = {
 // separately by /api/account/change-email/confirm.
 export async function POST(request) {
   const { email, code } = await request.json().catch(() => ({}));
-  const user = await getUserByEmail(email || "");
-  if (!user) return NextResponse.json({ error: "not_found", message: "No account with that email." }, { status: 404 });
 
-  const result = await checkVerificationCode(user.id, "signup_email", code);
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.error, message: ERROR_MESSAGES[result.error] || "Couldn't verify that code." },
-      { status: 400 }
-    );
+  try {
+    const user = await getUserByEmail(email || "");
+    if (!user) return NextResponse.json({ error: "not_found", message: "No account with that email." }, { status: 404 });
+
+    const result = await checkVerificationCode(user.id, "signup_email", code);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, message: ERROR_MESSAGES[result.error] || "Couldn't verify that code." },
+        { status: 400 }
+      );
+    }
+
+    await setEmailVerified(user.id);
+
+    const token = await createSession(user.id);
+    const res = NextResponse.json({ ok: true });
+    res.cookies.set(SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: SESSION_MAX_AGE, path: "/" });
+    return res;
+  } catch (e) {
+    console.error("Email verification failed:", e);
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
   }
-
-  await setEmailVerified(user.id);
-
-  const token = await createSession(user.id);
-  const res = NextResponse.json({ ok: true });
-  res.cookies.set(SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: SESSION_MAX_AGE, path: "/" });
-  return res;
 }
