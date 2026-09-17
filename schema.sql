@@ -153,6 +153,8 @@ CREATE TABLE IF NOT EXISTS gear (
   brand_name TEXT,
   model_name TEXT,
   distance_km DOUBLE PRECISION,
+  retired BOOLEAN NOT NULL DEFAULT false, -- athlete marked it retired on Strava
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   PRIMARY KEY (user_id, id)
 );
+ALTER TABLE gear ADD COLUMN IF NOT EXISTS retired BOOLEAN NOT NULL DEFAULT false;

@@ -244,240 +244,244 @@ export default function Dashboard() {
       )}
 
       {activities.length > 0 && (
-        <>
-          <div className="panel">
-            <h2 style={{ margin: 0 }}>Telemetry overlays</h2>
-            <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
-              A cockpit-readout card for each of your last {activities.length} activities — pace, power, heart rate,
-              and the trace itself, styled from your own numbers. Save one and post it straight to your Strava feed.
-            </div>
-            <div className="toggle-group" style={{ marginBottom: 4 }}>
-              {["ink", "paper", "signal"].map((k) => (
-                <div key={k} className={`toggle${theme === k ? " active" : ""}`} onClick={() => changeTheme(k)}>
-                  {k[0].toUpperCase() + k.slice(1)}
-                </div>
-              ))}
-              <div style={{ width: 16 }} />
-              {["metric", "imperial"].map((k) => (
-                <div key={k} className={`toggle${units === k ? " active" : ""}`} onClick={() => changeUnits(k)}>
-                  {k === "metric" ? "km · kg" : "mi · lb"}
-                </div>
-              ))}
-              <div style={{ flex: 1 }} />
-              <button style={{ width: "auto", padding: "7px 14px" }} onClick={runImport} disabled={importing}>
-                Re-sync
-              </button>
-            </div>
-          </div>
+        <div className="dashboard-grid">
+          <div className="dashboard-main">
+            {insights && (
+              <div className="panel insights">
+                <h2>Training load</h2>
+                {insights.load.acwr != null ? (
+                  <>
+                    <div className="load-number">{insights.load.acwr}</div>
+                    <div className="load-status">{insights.load.status}</div>
+                  </>
+                ) : (
+                  <div className="hint">{insights.load.status}</div>
+                )}
+                {insights.load.note && <div className="hint">{insights.load.note}</div>}
 
-          <div className="gallery">
-            {activities.map((a) => (
-              <div key={a.id} className="gallery-card">
-                {previews[a.id] ? <img src={previews[a.id]} alt={a.name} /> : <div className="status-line">Rendering…</div>}
-                <div className="gallery-card-footer">
-                  <span>{a.name}</span>
-                  <button style={{ width: "auto", padding: "6px 12px" }} onClick={() => savePng(a.id, a.name)}>
-                    Save PNG
-                  </button>
-                </div>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
-
-      {insights && activities.length > 0 && (
-        <div className="panel insights">
-          <h2>Training load</h2>
-          {insights.load.acwr != null ? (
-            <>
-              <div className="load-number">{insights.load.acwr}</div>
-              <div className="load-status">{insights.load.status}</div>
-            </>
-          ) : (
-            <div className="hint">{insights.load.status}</div>
-          )}
-          {insights.load.note && <div className="hint">{insights.load.note}</div>}
-
-          {insights.pace && (
-            <>
-              <h2 style={{ marginTop: 20 }}>Race pace projection</h2>
-              <div className="pace-grid">
-                {insights.pace.predictions.map((p) => (
-                  <div key={p.label} className="pace-cell">
-                    <div className="hint">{p.label}</div>
-                    <div className="pace-time">{formatDuration(p.seconds)}</div>
-                  </div>
-                ))}
-              </div>
-              <div className="hint">
-                From your {insights.pace.referenceActivity.distanceKm}km effort — {insights.pace.note}
-              </div>
-            </>
-          )}
-        </div>
-      )}
-
-      {insights && activities.length > 0 && (
-        <div className="panel">
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-            <h2 style={{ margin: 0 }}>Biomechanical &amp; Overtraining Shield</h2>
-            <button
-              style={{ width: "auto", padding: "6px 12px" }}
-              onClick={refreshAiInsights}
-              disabled={refreshingAi || insights.aiLocked}
-              title={insights.aiLocked ? "Refresh limit reached for your tier" : undefined}
-            >
-              {refreshingAi ? "Analyzing…" : "Refresh AI analysis"}
-            </button>
-          </div>
-          <div className="hint" style={{ marginTop: 6 }}>
-            Physics-based signals computed from your own activity streams — aerobic decoupling, cadence drift,
-            and workload ramp — interpreted below into a risk read, recovery plan, and nutrition guidance.
-          </div>
-
-          {insights.biomechanics && (
-            <div className="pace-grid" style={{ marginTop: 14, gridTemplateColumns: "repeat(3, 1fr)" }}>
-              <div className="pace-cell">
-                <div className="hint">Acute:chronic load</div>
-                <div className="pace-time">{insights.load.acwr != null ? insights.load.acwr : "—"}</div>
-              </div>
-              <div className="pace-cell">
-                <div className="hint">Aerobic decoupling (30d)</div>
-                <div className="pace-time">
-                  {insights.biomechanics.windows.last30Days.avgDecouplingPct != null
-                    ? `${insights.biomechanics.windows.last30Days.avgDecouplingPct}%`
-                    : "—"}
-                </div>
-              </div>
-              <div className="pace-cell">
-                <div className="hint">Cadence drift (30d)</div>
-                <div className="pace-time">
-                  {insights.biomechanics.windows.last30Days.avgCadenceDriftPct != null
-                    ? `${insights.biomechanics.windows.last30Days.avgCadenceDriftPct}%`
-                    : "—"}
-                </div>
-              </div>
-            </div>
-          )}
-          {insights.biomechanics && insights.biomechanics.windows.last30Days.readableActivities === 0 && (
-            <div className="hint" style={{ marginTop: 8 }}>
-              Decoupling and cadence drift need sustained efforts (18+ minutes) with heart-rate plus pace, power,
-              or cadence data — none of your recent activities have enough of that yet.
-            </div>
-          )}
-
-          {insights.ageSource === "unavailable" && (
-            <div className="hint" style={{ marginTop: 10 }}>
-              Strava doesn&rsquo;t share date of birth, so this estimate doesn&rsquo;t know your age yet.{" "}
-              <a href="/account">Add your date of birth</a> in My account for a sharper read.
-            </div>
-          )}
-
-          {insights.aiLocked && (
-            <div className="status-line warn" style={{ marginTop: 10 }}>
-              You&rsquo;ve used this tier&rsquo;s AI refresh for now
-              {insights.nextEligibleAt ? ` — next one available ${new Date(insights.nextEligibleAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : ""}.{" "}
-              <a href="/account">Upgrade to Plus or Pro</a> for more frequent updates.
-            </div>
-          )}
-
-          {insights.ai ? (
-            <>
-              <div className={`risk-badge risk-${insights.ai.risk_level}`} style={{ marginTop: 14 }}>
-                {insights.ai.risk_level} risk · {insights.ai.risk_score}/100
-              </div>
-              <div className="hint" style={{ color: "var(--ink)", marginTop: 8 }}>{insights.ai.risk_summary}</div>
-
-              <div className="ai-columns">
-                <div>
-                  <h3>Risk factors</h3>
-                  <ul>{insights.ai.risk_factors.map((f, i) => <li key={i}>{f}</li>)}</ul>
-                </div>
-                <div>
-                  <h3>Recovery plan</h3>
-                  <ul>{insights.ai.recovery_plan.map((f, i) => <li key={i}>{f}</li>)}</ul>
-                </div>
-                <div>
-                  <h3>Nutrition plan</h3>
-                  <ul>{insights.ai.nutrition_plan.map((f, i) => <li key={i}>{f}</li>)}</ul>
-                </div>
-              </div>
-
-              {insights.ai.training_adjustment && insights.ai.training_adjustment.length > 0 && (
-                <>
-                  <h2 style={{ marginTop: 20 }}>Recommended training adjustment</h2>
-                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: "calc(13px * var(--fs-scale, 1))", lineHeight: 1.6 }}>
-                    {insights.ai.training_adjustment.map((f, i) => <li key={i} style={{ marginBottom: 6 }}>{f}</li>)}
-                  </ul>
-                  <div className="hint" style={{ marginTop: 8 }}>
-                    This doesn&rsquo;t change your saved plan automatically — head to{" "}
-                    <a href="/training-plan">Training plan</a> to update it if you agree.
-                  </div>
-                </>
-              )}
-
-              <div className="hint" style={{ marginTop: 12 }}>
-                {insights.aiStale ? "Showing the last successful analysis — the latest refresh failed. " : ""}
-                Generated by an AI model from your recent training patterns — a wellness heuristic, not medical advice.
-              </div>
-            </>
-          ) : (
-            <div className="hint" style={{ marginTop: 10 }}>
-              {insights.aiError
-                ? `Couldn't generate an AI analysis right now (${insights.aiError}).`
-                : "No AI analysis yet."}
-            </div>
-          )}
-        </div>
-      )}
-
-      {equipment && equipment.items.length > 0 && (
-        <div className="panel">
-          <h2>Equipment Lifecycle &amp; Telemetry</h2>
-          <div className="hint" style={{ marginTop: 6, marginBottom: 4 }}>
-            Wear estimated from Strava&rsquo;s own gear mileage — shoe foam compression scaled to your body
-            weight if you&rsquo;ve added it, bike chain wear from typical drivetrain mileage.
-            {!equipment.weightOnFile && (
-              <> <a href="/account">Add your weight</a> for a sharper shoe estimate.</>
-            )}
-          </div>
-          <div className="equipment-list">
-            {equipment.items.map((item) => (
-              <div key={item.id} className="equipment-item">
-                <div className="equipment-item-head">
-                  <span>{item.name || (item.gearType === "bike" ? "Bike" : "Shoes")}</span>
-                  <span className={`equipment-status equipment-status-${item.status}`}>
-                    {item.status === "replace" ? "Replace soon" : item.status === "watch" ? "Nearing replacement" : "Healthy"}
-                  </span>
-                </div>
-                <div className="progress-track">
-                  <div
-                    className={`progress-fill${item.status !== "healthy" ? " progress-fill-warn" : ""}`}
-                    style={{ width: `${Math.min(100, item.percentUsed)}%` }}
-                  />
-                </div>
-                <div className="hint" style={{ marginTop: 4 }}>
-                  {item.distanceKm}km of an estimated {item.thresholdKm}km ({item.percentUsed}%)
-                </div>
-                <div className="hint" style={{ marginTop: 6, color: "var(--ink)" }}>{item.recommendation}</div>
-                {item.shopUrl && (
-                  <a href={item.shopUrl} target="_blank" rel="noreferrer" style={{ fontSize: "calc(12.5px * var(--fs-scale, 1))" }}>
-                    Shop replacement options →
-                  </a>
+                {insights.pace && (
+                  <>
+                    <h2 style={{ marginTop: 20 }}>Race pace projection</h2>
+                    <div className="pace-grid">
+                      {insights.pace.predictions.map((p) => (
+                        <div key={p.label} className="pace-cell">
+                          <div className="hint">{p.label}</div>
+                          <div className="pace-time">{formatDuration(p.seconds)}</div>
+                        </div>
+                      ))}
+                    </div>
+                    <div className="hint">
+                      From your {insights.pace.referenceActivity.distanceKm}km effort — {insights.pace.note}
+                    </div>
+                  </>
                 )}
               </div>
-            ))}
-          </div>
-        </div>
-      )}
+            )}
 
-      {equipment && equipment.items.length === 0 && activities.length > 0 && (
-        <div className="panel">
-          <h2>Equipment Lifecycle &amp; Telemetry</h2>
-          <div className="hint" style={{ marginTop: 6 }}>
-            No gear tagged on your imported activities yet — add shoes or a bike to your activities in Strava,
-            then hit Re-sync above to start tracking wear.
+            {insights && (
+              <div className="panel">
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
+                  <h2 style={{ margin: 0 }}>Biomechanical &amp; Overtraining Shield</h2>
+                  <button
+                    style={{ width: "auto", padding: "6px 12px" }}
+                    onClick={refreshAiInsights}
+                    disabled={refreshingAi || insights.aiLocked}
+                    title={insights.aiLocked ? "Refresh limit reached for your tier" : undefined}
+                  >
+                    {refreshingAi ? "Analyzing…" : "Refresh AI analysis"}
+                  </button>
+                </div>
+                <div className="hint" style={{ marginTop: 6 }}>
+                  Physics-based signals computed from your own activity streams — aerobic decoupling, cadence drift,
+                  and workload ramp — interpreted below into a risk read, recovery plan, and nutrition guidance.
+                </div>
+
+                {insights.biomechanics && (
+                  <div className="pace-grid" style={{ marginTop: 14, gridTemplateColumns: "repeat(3, 1fr)" }}>
+                    <div className="pace-cell">
+                      <div className="hint">Acute:chronic load</div>
+                      <div className="pace-time">{insights.load.acwr != null ? insights.load.acwr : "—"}</div>
+                    </div>
+                    <div className="pace-cell">
+                      <div className="hint">Aerobic decoupling (30d)</div>
+                      <div className="pace-time">
+                        {insights.biomechanics.windows.last30Days.avgDecouplingPct != null
+                          ? `${insights.biomechanics.windows.last30Days.avgDecouplingPct}%`
+                          : "—"}
+                      </div>
+                    </div>
+                    <div className="pace-cell">
+                      <div className="hint">Cadence drift (30d)</div>
+                      <div className="pace-time">
+                        {insights.biomechanics.windows.last30Days.avgCadenceDriftPct != null
+                          ? `${insights.biomechanics.windows.last30Days.avgCadenceDriftPct}%`
+                          : "—"}
+                      </div>
+                    </div>
+                  </div>
+                )}
+                {insights.biomechanics && insights.biomechanics.windows.last30Days.readableActivities === 0 && (
+                  <div className="hint" style={{ marginTop: 8 }}>
+                    Decoupling and cadence drift need sustained efforts (18+ minutes) with heart-rate plus pace, power,
+                    or cadence data — none of your recent activities have enough of that yet.
+                  </div>
+                )}
+
+                {insights.ageSource === "unavailable" && (
+                  <div className="hint" style={{ marginTop: 10 }}>
+                    Strava doesn&rsquo;t share date of birth, so this estimate doesn&rsquo;t know your age yet.{" "}
+                    <a href="/account">Add your date of birth</a> in My account for a sharper read.
+                  </div>
+                )}
+
+                {insights.aiLocked && (
+                  <div className="status-line warn" style={{ marginTop: 10 }}>
+                    You&rsquo;ve used this tier&rsquo;s AI refresh for now
+                    {insights.nextEligibleAt ? ` — next one available ${new Date(insights.nextEligibleAt).toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" })}` : ""}.{" "}
+                    <a href="/account">Upgrade to Plus or Pro</a> for more frequent updates.
+                  </div>
+                )}
+
+                {insights.ai ? (
+                  <>
+                    <div className={`risk-badge risk-${insights.ai.risk_level}`} style={{ marginTop: 14 }}>
+                      {insights.ai.risk_level} risk · {insights.ai.risk_score}/100
+                    </div>
+                    <div className="hint" style={{ color: "var(--ink)", marginTop: 8 }}>{insights.ai.risk_summary}</div>
+
+                    <div className="ai-columns">
+                      <div>
+                        <h3>Risk factors</h3>
+                        <ul>{insights.ai.risk_factors.map((f, i) => <li key={i}>{f}</li>)}</ul>
+                      </div>
+                      <div>
+                        <h3>Recovery plan</h3>
+                        <ul>{insights.ai.recovery_plan.map((f, i) => <li key={i}>{f}</li>)}</ul>
+                      </div>
+                      <div>
+                        <h3>Nutrition plan</h3>
+                        <ul>{insights.ai.nutrition_plan.map((f, i) => <li key={i}>{f}</li>)}</ul>
+                      </div>
+                    </div>
+
+                    {insights.ai.training_adjustment && insights.ai.training_adjustment.length > 0 && (
+                      <>
+                        <h2 style={{ marginTop: 20 }}>Recommended training adjustment</h2>
+                        <ul style={{ margin: 0, paddingLeft: 18, fontSize: "calc(13px * var(--fs-scale, 1))", lineHeight: 1.6 }}>
+                          {insights.ai.training_adjustment.map((f, i) => <li key={i} style={{ marginBottom: 6 }}>{f}</li>)}
+                        </ul>
+                        <div className="hint" style={{ marginTop: 8 }}>
+                          This doesn&rsquo;t change your saved plan automatically — head to{" "}
+                          <a href="/training-plan">Training plan</a> to update it if you agree.
+                        </div>
+                      </>
+                    )}
+
+                    <div className="hint" style={{ marginTop: 12 }}>
+                      {insights.aiStale ? "Showing the last successful analysis — the latest refresh failed. " : ""}
+                      Generated by an AI model from your recent training patterns — a wellness heuristic, not medical advice.
+                    </div>
+                  </>
+                ) : (
+                  <div className="hint" style={{ marginTop: 10 }}>
+                    {insights.aiError
+                      ? `Couldn't generate an AI analysis right now (${insights.aiError}).`
+                      : "No AI analysis yet."}
+                  </div>
+                )}
+              </div>
+            )}
+
+            <div className="panel">
+              <h2 style={{ margin: 0 }}>Telemetry overlays</h2>
+              <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
+                A cockpit-readout card for each of your last {activities.length} activities — pace, power, heart rate,
+                and the trace itself, styled from your own numbers. Save one and post it straight to your Strava feed.
+              </div>
+              <div className="toggle-group" style={{ marginBottom: 4 }}>
+                {["ink", "paper", "signal"].map((k) => (
+                  <div key={k} className={`toggle${theme === k ? " active" : ""}`} onClick={() => changeTheme(k)}>
+                    {k[0].toUpperCase() + k.slice(1)}
+                  </div>
+                ))}
+                <div style={{ width: 16 }} />
+                {["metric", "imperial"].map((k) => (
+                  <div key={k} className={`toggle${units === k ? " active" : ""}`} onClick={() => changeUnits(k)}>
+                    {k === "metric" ? "km · kg" : "mi · lb"}
+                  </div>
+                ))}
+                <div style={{ flex: 1 }} />
+                <button style={{ width: "auto", padding: "7px 14px" }} onClick={runImport} disabled={importing}>
+                  Re-sync
+                </button>
+              </div>
+            </div>
+
+            <div className="gallery">
+              {activities.map((a) => (
+                <div key={a.id} className="gallery-card">
+                  {previews[a.id] ? <img src={previews[a.id]} alt={a.name} /> : <div className="status-line">Rendering…</div>}
+                  <div className="gallery-card-footer">
+                    <span>{a.name}</span>
+                    <button style={{ width: "auto", padding: "6px 12px" }} onClick={() => savePng(a.id, a.name)}>
+                      Save PNG
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="dashboard-side">
+            {equipment && equipment.items.length > 0 && (
+              <div className="panel">
+                <h2>Equipment Lifecycle &amp; Telemetry</h2>
+                <div className="hint" style={{ marginTop: 6, marginBottom: 4 }}>
+                  Wear estimated from Strava&rsquo;s own gear mileage — shoe foam compression scaled to your body
+                  weight if you&rsquo;ve added it, bike chain wear from typical drivetrain mileage.
+                  {!equipment.weightOnFile && (
+                    <> <a href="/account">Add your weight</a> for a sharper shoe estimate.</>
+                  )}
+                </div>
+                <div className="equipment-list equipment-list-scroll">
+                  {equipment.items.map((item) => (
+                    <div key={item.id} className="equipment-item">
+                      <div className="equipment-item-head">
+                        <span>{item.name || (item.gearType === "bike" ? "Bike" : "Shoes")}</span>
+                        <span className={`equipment-status equipment-status-${item.status}`}>
+                          {item.status === "replace" ? "Replace soon" : item.status === "watch" ? "Nearing replacement" : "Healthy"}
+                        </span>
+                      </div>
+                      <div className="progress-track">
+                        <div
+                          className={`progress-fill${item.status !== "healthy" ? " progress-fill-warn" : ""}`}
+                          style={{ width: `${Math.min(100, item.percentUsed)}%` }}
+                        />
+                      </div>
+                      <div className="hint" style={{ marginTop: 4 }}>
+                        {item.distanceKm}km of an estimated {item.thresholdKm}km ({item.percentUsed}%)
+                      </div>
+                      <div className="hint" style={{ marginTop: 6, color: "var(--ink)" }}>{item.recommendation}</div>
+                      {item.shopUrl && (
+                        <a href={item.shopUrl} target="_blank" rel="noreferrer" style={{ fontSize: "calc(12.5px * var(--fs-scale, 1))" }}>
+                          Shop replacement options →
+                        </a>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {equipment && equipment.items.length === 0 && (
+              <div className="panel">
+                <h2>Equipment Lifecycle &amp; Telemetry</h2>
+                <div className="hint" style={{ marginTop: 6 }}>
+                  No unretired gear tagged on your imported activities yet — add shoes or a bike to your
+                  activities in Strava, then hit Re-sync above to start tracking wear.
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

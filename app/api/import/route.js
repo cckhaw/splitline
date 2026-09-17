@@ -84,6 +84,7 @@ export async function POST(request) {
             brandName: gear.brand_name || null,
             modelName: gear.model_name || null,
             distanceKm: gear.distance != null ? gear.distance / 1000 : null,
+            retired: Boolean(gear.retired),
           });
         } catch (e) {
           console.error(`Failed to fetch/cache gear ${detail.gear_id}:`, e);
