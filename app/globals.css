@@ -126,6 +126,28 @@ input::placeholder { color: var(--ink-dim); }
 .panel form button { margin-top: 18px; }
 
 /* dashboard */
+.user-menu { position: relative; }
+.user-menu-trigger {
+  width: auto; display: flex; align-items: center; gap: 6px; padding: 8px 14px;
+  background: transparent; border: 1px solid var(--line); color: var(--ink);
+  border-radius: var(--radius); cursor: pointer; font-family: var(--font-head); font-size: 13.5px;
+}
+.user-menu-trigger:hover { border-color: var(--ink-dim); }
+.user-menu-trigger .caret { font-size: 10px; color: var(--ink-dim); }
+.user-menu-dropdown {
+  position: absolute; top: calc(100% + 6px); right: 0; min-width: 180px;
+  background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius);
+  overflow: hidden; z-index: 20; box-shadow: 0 10px 30px rgba(0,0,0,0.25);
+}
+.user-menu-dropdown a, .user-menu-item {
+  display: block; padding: 11px 14px; font-size: 13.5px; color: var(--ink);
+  text-decoration: none; cursor: pointer; white-space: nowrap;
+}
+.user-menu-dropdown a:hover, .user-menu-item:hover { background: rgba(239,163,59,0.1); }
+.user-menu-dropdown a + a, .user-menu-dropdown a + .user-menu-item, .user-menu-dropdown .user-menu-item + .user-menu-item {
+  border-top: 1px solid var(--line);
+}
+
 .advanced-toggle { margin-top: 16px; font-size: 12.5px; color: var(--ink-dim); cursor: pointer; }
 .advanced-form { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
 .progress-track { height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; margin: 10px 0 4px; }

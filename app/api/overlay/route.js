@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
 import { getActivityById } from "@/lib/db";
 import { buildSvg } from "@/lib/svg";
+import { svgToPng } from "@/lib/renderPng";
 
 export const runtime = "nodejs";
 
@@ -38,7 +39,6 @@ export async function POST(request) {
   if (format === "svg") {
     return new NextResponse(svg, { headers: { "content-type": "image/svg+xml", "cache-control": "no-store" } });
   }
-  const { Resvg } = await import("@resvg/resvg-js");
-  const png = new Resvg(svg, { font: { loadSystemFonts: true } }).render().asPng();
+  const png = await svgToPng(svg);
   return new NextResponse(png, { headers: { "content-type": "image/png", "cache-control": "no-store" } });
 }

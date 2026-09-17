@@ -6,7 +6,7 @@ import { buildActivitySummary } from "@/lib/insights";
 import { generateTrainingPlan } from "@/lib/anthropic";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
+export const maxDuration = 60; // Pro plan+; Hobby caps this lower regardless — see README.
 
 function weeksUntil(eventDate, now) {
   const ms = new Date(eventDate).getTime() - now.getTime();
@@ -24,15 +24,20 @@ export async function GET(request) {
   const url = new URL(request.url);
   const forceRefresh = url.searchParams.get("refresh") === "1";
 
-  const goal = await getRaceGoal(session.userId);
-  if (!goal) return NextResponse.json({ error: "no_goal", message: "Set an upcoming event first." }, { status: 400 });
+  let goal, activities, user;
+  try {
+    goal = await getRaceGoal(session.userId);
+    if (!goal) return NextResponse.json({ error: "no_goal", message: "Set an upcoming event first." }, { status: 400 });
+    [activities, user] = await Promise.all([
+      getActivitiesForUser(session.userId, 30),
+      getUserById(session.userId),
+    ]);
+  } catch (e) {
+    console.error("Failed to load data for training plan:", e);
+    return NextResponse.json({ error: "server_error", message: String(e.message || e) }, { status: 500 });
+  }
 
   const now = new Date();
-  const [activities, user] = await Promise.all([
-    getActivitiesForUser(session.userId, 30),
-    getUserById(session.userId),
-  ]);
-
   const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now);
   const eventInfo = {
     eventType: goal.eventType,
@@ -56,7 +61,11 @@ export async function GET(request) {
 
   try {
     const plan = await generateTrainingPlan(summary, eventInfo);
-    await saveTrainingPlan(session.userId, inputHash, plan);
+    try {
+      await saveTrainingPlan(session.userId, inputHash, plan);
+    } catch (e) {
+      console.error("Failed to cache training plan (returning it anyway):", e);
+    }
     return NextResponse.json({ goal: eventInfo, plan, generatedAt: new Date().toISOString(), cached: false });
   } catch (e) {
     console.error("AI training plan generation failed:", e);

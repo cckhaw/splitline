@@ -4,12 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
-
-const EVENT_TYPES = [
-  { value: "running", label: "Running race" },
-  { value: "duathlon", label: "Duathlon" },
-  { value: "triathlon", label: "Triathlon" },
-];
+import { EVENT_TYPES, DISTANCE_OPTIONS } from "@/lib/eventTypes";
 
 function minEventDate() {
   const d = new Date();
@@ -20,6 +15,23 @@ function minEventDate() {
 function weeksAway(eventDate) {
   const ms = new Date(eventDate).getTime() - Date.now();
   return Math.max(0, Math.round(ms / (7 * 24 * 60 * 60 * 1000)));
+}
+
+// A response can come back with an empty or non-JSON body — a platform
+// timeout truncating a slow AI call, a proxy error page, a crashed
+// function — and calling res.json() directly on that throws a raw
+// "Unexpected end of JSON input" that isn't useful to show anyone. This
+// parses defensively and always returns a message, even on failure.
+async function safeJson(res) {
+  const text = await res.text();
+  if (!text) {
+    return { ok: false, message: res.ok ? "The server returned an empty response." : `Server error (${res.status}).` };
+  }
+  try {
+    return JSON.parse(text);
+  } catch {
+    return { ok: false, message: `Unexpected response from the server (${res.status}).` };
+  }
 }
 
 export default function TrainingPlanPage() {
@@ -34,7 +46,7 @@ export default function TrainingPlanPage() {
   const [eventType, setEventType] = useState("running");
   const [eventName, setEventName] = useState("");
   const [eventDate, setEventDate] = useState("");
-  const [targetDistance, setTargetDistance] = useState("");
+  const [targetDistance, setTargetDistance] = useState(DISTANCE_OPTIONS.running[0]);
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [changingEvent, setChangingEvent] = useState(false);
@@ -48,11 +60,21 @@ export default function TrainingPlanPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
 
+  function changeEventType(next) {
+    setEventType(next);
+    setTargetDistance(DISTANCE_OPTIONS[next][0]);
+  }
+
   async function loadGoal() {
-    const res = await fetch("/api/event");
-    const data = await res.json();
-    setGoal(data.goal || null);
-    if (data.goal) loadPlan();
+    try {
+      const res = await fetch("/api/event");
+      const data = await safeJson(res);
+      if (!res.ok) throw new Error(data.message || "Couldn't load your event.");
+      setGoal(data.goal || null);
+      if (data.goal) await loadPlan();
+    } catch (e) {
+      setFormError(e.message);
+    }
   }
 
   async function loadPlan(refresh = false) {
@@ -61,11 +83,12 @@ export default function TrainingPlanPage() {
     setPlanError("");
     try {
       const res = await fetch(`/api/training-plan${refresh ? "?refresh=1" : ""}`);
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't load the training plan.");
       setPlan(data.plan);
       if (!data.plan && data.error) setPlanError(data.error);
     } catch (e) {
+      setPlan(null);
       setPlanError(e.message);
     } finally {
       setLoadingPlan(false);
@@ -83,7 +106,7 @@ export default function TrainingPlanPage() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ eventType, eventName, eventDate, targetDistance }),
       });
-      const data = await res.json();
+      const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't save that event.");
       setChangingEvent(false);
       setPlan(null);
@@ -127,13 +150,15 @@ export default function TrainingPlanPage() {
           </div>
           <form onSubmit={handleSetEvent}>
             <label>Event type</label>
-            <select value={eventType} onChange={(e) => setEventType(e.target.value)}>
+            <select value={eventType} onChange={(e) => changeEventType(e.target.value)}>
               {EVENT_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
             </select>
-            <label>Event name (optional)</label>
-            <input value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g. City Marathon" />
-            <label>Target distance (optional)</label>
-            <input value={targetDistance} onChange={(e) => setTargetDistance(e.target.value)} placeholder="e.g. 10K, Olympic distance, Half Ironman" />
+            <label>Event name</label>
+            <input required value={eventName} onChange={(e) => setEventName(e.target.value)} placeholder="e.g. City Marathon" />
+            <label>Distance</label>
+            <select value={targetDistance} onChange={(e) => setTargetDistance(e.target.value)}>
+              {DISTANCE_OPTIONS[eventType].map((d) => <option key={d} value={d}>{d}</option>)}
+            </select>
             <label>Event date</label>
             <input type="date" required min={minEventDate()} value={eventDate} onChange={(e) => setEventDate(e.target.value)} />
             {formError && <div className="status-line warn">{formError}</div>}
@@ -175,7 +200,7 @@ export default function TrainingPlanPage() {
               </button>
             </div>
 
-            {loadingPlan && <div className="hint" style={{ marginTop: 12 }}>Building your plan…</div>}
+            {loadingPlan && <div className="hint" style={{ marginTop: 12 }}>Building your plan… this can take up to 30 seconds.</div>}
 
             {!loadingPlan && plan && (
               <>

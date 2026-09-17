@@ -194,15 +194,22 @@ called on every page load.
 
 ## Light/dark appearance
 
-A theme toggle (`components/ThemeToggle.js`) appears in the header of
-every page. It writes `data-theme` on `<html>` and persists the choice to
-`localStorage` — there's no server-side account setting for it, so it's
-per-browser, not per-account. An inline script in `app/layout.js` applies
-the stored theme before first paint to avoid a flash of the wrong colors;
-that script intentionally runs before React hydrates, which is why
-`<html>` carries `suppressHydrationWarning`. Light mode reuses the same
-warm-paper palette as the "paper" overlay card theme, so the brand stays
-consistent across both surfaces.
+A theme toggle appears on every page: a standalone button
+(`components/ThemeToggle.js`) on the marketing/auth/account pages, and as
+a "Light mode"/"Dark mode" item inside the dashboard's user menu
+(`components/UserMenu.js` — see below) so it doesn't compete with that
+page's own toggles. Both write `data-theme` on `<html>` and persist the
+choice to `localStorage` — there's no server-side account setting for it,
+so it's per-browser, not per-account. An inline script in `app/layout.js`
+applies the stored theme before first paint to avoid a flash of the wrong
+colors; that script intentionally runs before React hydrates, which is
+why `<html>` carries `suppressHydrationWarning`. Light mode reuses the
+same warm-paper palette as the "paper" overlay card theme, so the brand
+stays consistent across both surfaces.
+
+The dashboard header itself is a single control: clicking the athlete's
+name opens a dropdown (Training plan, My account, Light/dark mode, Log
+out) instead of spreading those as flat links — `components/UserMenu.js`.
 
 ## Exporting the prediction and injury panels as social images
 
@@ -210,35 +217,65 @@ Both the "Training load & race pace" panel and the "Injury risk, recovery
 & nutrition" panel have a portrait/landscape toggle and an "Export image"
 button. This hits `/api/insights/export`, which rebuilds the panel as a
 standalone SVG card (`lib/insightCard.js` — same visual language as the
-per-activity overlay in `lib/svg.js`) and rasterizes it to PNG with
-`@resvg/resvg-js`, the same library the activity overlays already use.
-The injury card renders from whatever AI analysis is currently cached, so
-generate or refresh that panel first if there isn't one yet.
+per-activity overlay in `lib/svg.js`) and rasterizes it to PNG via
+`lib/renderPng.js`. The injury card renders from whatever AI analysis is
+currently cached, so generate or refresh that panel first if there isn't
+one yet.
+
+Rasterizing SVG to PNG on the server bundles the app's actual type files
+(`assets/fonts/*.ttf` — Space Grotesk and IBM Plex Mono, both SIL Open
+Font License) and passes them to `@resvg/resvg-js` explicitly via
+`font.fontFiles`, rather than asking it to find "Space Grotesk" /
+"IBM Plex Mono" among the system's installed fonts. That distinction
+matters in production: Vercel's serverless runtime has no system fonts
+at all, so `loadSystemFonts` finds nothing to match, and every text
+element silently renders as invisible — the background renders fine, but
+the exported card comes back blank. `next.config.mjs`'s
+`outputFileTracingIncludes` makes sure those `.ttf` files actually ship
+with the deployed function (they're read via `fs` at runtime, not
+imported, so Next's build-time tracer won't find them on its own).
 
 ## Training plan for an upcoming event
 
-The dashboard's **Training plan** link takes an athlete to set one
-upcoming event — a running race, duathlon, or triathlon, with an optional
-name and target distance, and a date that has to be at least 4 weeks out
-(enforced server-side in `/api/event`, so there's room for a real
-progressive plan). Once set, `/api/training-plan` sends the same
-aggregated activity summary used by the injury-risk panel, plus the event
-type and exact weeks remaining, to Claude, which returns a periodized
-plan: 3-8 phases (e.g. Base/Build/Peak/Taper) spanning the full time to
-the event — grouped into phases rather than one entry per week, since
-that range can be a month or most of a year — plus recovery guidelines, a
-nutrition plan, final pre-race preparation (48-72h out), and a race-day
-strategy. Like the injury panel, the plan is cached (`training_plans`
-table) and only regenerated when the goal or the underlying activity data
-changes, or via the page's "Refresh plan" button. Setting a new event
-clears any previously cached plan.
+The dashboard's hamburger menu (click the athlete's name, top right) has
+a **Training plan** link that takes an athlete to set one upcoming event
+— a running race, duathlon, or triathlon, with a required name and a
+distance chosen from a dropdown scoped to that event type (`lib/eventTypes.js`
+is the single source of truth for both the form and the server-side
+validation in `/api/event`):
+
+- **Running:** 5K, 10K, Half Marathon, Marathon, Ultra (50K+)
+- **Duathlon:** Sprint (5K run – 30K bike – 5K run), Standard (10K–60K–10K)
+- **Triathlon:** Sprint, Olympic Distance, Half Ironman (70.3), Full Ironman (140.6)
+
+The event date has to be at least 4 weeks out (enforced server-side, so
+there's room for a real progressive plan). Once set, `/api/training-plan`
+sends the same aggregated activity summary used by the injury-risk panel,
+plus the event type, chosen distance, and exact weeks remaining, to
+Claude, which returns a periodized plan: 3-8 phases (e.g.
+Base/Build/Peak/Taper) spanning the full time to the event — grouped into
+phases rather than one entry per week, since that range can be a month or
+most of a year — plus recovery guidelines, a nutrition plan, final
+pre-race preparation (48-72h out), and a race-day strategy. Like the
+injury panel, the plan is cached (`training_plans` table) and only
+regenerated when the goal or the underlying activity data changes, or via
+the page's "Refresh plan" button. Setting a new event clears any
+previously cached plan.
+
+This is the heaviest AI call in the app (a bigger structured schema than
+the injury panel), so it runs at `effort: "medium"` rather than `"high"`
+to keep latency down — `/api/training-plan` sets `maxDuration = 60`, but
+**that ceiling only applies on Vercel's Pro plan or above; the Hobby plan
+hard-caps every serverless function at 10 seconds regardless of what the
+code requests**, and a slow AI call that gets killed mid-flight comes
+back as an empty response. Both `/api/event` and `/api/training-plan` now
+wrap their logic in try/catch so an unexpected failure always returns a
+proper JSON error instead of a raw connection cutoff, and the client
+parses defensively either way — but if training-plan generation times out
+consistently, that's the plan tier to check first.
 
 ## What's still simple on purpose (MVP tradeoffs)
 
-- **PNG rendering uses system fonts as a fallback** — bundle the actual
-  Space Grotesk / IBM Plex Mono `.ttf` files and pass them to
-  `@resvg/resvg-js`'s `font.fontFiles` in `app/api/overlay/route.js` for
-  pixel-exact match to the preview.
 - **No webhook / auto-import.** Someone has to click Import (or
   Re-sync). Strava's push-subscription API would close that gap.
 - **No self-service password reset** (see above) — signup/login/email

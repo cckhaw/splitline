@@ -1,9 +1,8 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
-import ThemeToggle from "@/components/ThemeToggle";
+import UserMenu from "@/components/UserMenu";
 
 const ERROR_MESSAGES = {
   state_mismatch: "That connection attempt looked tampered with — try connecting again.",
@@ -233,11 +232,6 @@ export default function Dashboard() {
     }
   }
 
-  async function handleLogout() {
-    await fetch("/api/auth/logout", { method: "POST" });
-    router.push("/login");
-  }
-
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
   return (
@@ -245,11 +239,7 @@ export default function Dashboard() {
       <header className="top">
         <div className="wordmark">SPLIT<span>LINE</span></div>
         <nav className="navlinks">
-          <span className="tagline">{me.name || me.email}</span>
-          <Link href="/training-plan">Training plan</Link>
-          <Link href="/account">My account</Link>
-          <ThemeToggle />
-          <button style={{ width: "auto", padding: "7px 14px" }} onClick={handleLogout}>Log out</button>
+          <UserMenu name={me.name || me.email} />
         </nav>
       </header>
 
