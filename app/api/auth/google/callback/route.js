@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { exchangeCode, getUserInfo } from "@/lib/google";
 import { getUserByGoogleId, getUserByEmail, createUser, linkGoogleId, setEmailVerified } from "@/lib/db";
 import { createSession, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
+import { betaSignupTierGrant } from "@/lib/membership";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,7 @@ export async function GET(request) {
         user = await createUser(profile.name || profile.email, profile.email, null, {
           emailVerified: Boolean(profile.email_verified),
           googleId: profile.sub,
+          ...betaSignupTierGrant(),
         });
         isNewUser = true;
       }
