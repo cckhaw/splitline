@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSessionUser } from "@/lib/authGuard";
-import { getUserById, getUserByEmail, updateUserPassword } from "@/lib/db";
+import { getUserById, getUserByEmail, updateUserPassword, friendlyDbErrorMessage } from "@/lib/db";
 
 export const runtime = "nodejs";
 
@@ -17,18 +17,23 @@ export async function POST(request) {
     return NextResponse.json({ error: "password_mismatch", message: "New passwords don't match." }, { status: 400 });
   }
 
-  // Look the user up by primary key via their session, not by trusting client input.
-  const user = await getUserById(session.userId);
-  const withHash = await getUserByEmail(user.email);
+  try {
+    // Look the user up by primary key via their session, not by trusting client input.
+    const user = await getUserById(session.userId);
+    const withHash = await getUserByEmail(user.email);
 
-  if (withHash.password_hash) {
-    if (!currentPassword || !(await bcrypt.compare(currentPassword, withHash.password_hash))) {
-      return NextResponse.json({ error: "wrong_password", message: "Current password is incorrect." }, { status: 401 });
+    if (withHash.password_hash) {
+      if (!currentPassword || !(await bcrypt.compare(currentPassword, withHash.password_hash))) {
+        return NextResponse.json({ error: "wrong_password", message: "Current password is incorrect." }, { status: 401 });
+      }
     }
-  }
-  // Accounts created via Google with no password yet can set one without a "current password".
+    // Accounts created via Google with no password yet can set one without a "current password".
 
-  const hash = await bcrypt.hash(newPassword, 10);
-  await updateUserPassword(session.userId, hash);
-  return NextResponse.json({ ok: true });
+    const hash = await bcrypt.hash(newPassword, 10);
+    await updateUserPassword(session.userId, hash);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("Failed to change password:", e);
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
+  }
 }

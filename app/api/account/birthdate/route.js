@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { updateUserBirthDate } from "@/lib/db";
+import { updateUserBirthDate, friendlyDbErrorMessage } from "@/lib/db";
 import { ageFromBirthDate } from "@/lib/insights";
 
 export const runtime = "nodejs";
@@ -26,6 +26,11 @@ export async function POST(request) {
     return NextResponse.json({ error: "too_young", message: `Splitline accounts require an age of at least ${MIN_AGE}.` }, { status: 403 });
   }
 
-  await updateUserBirthDate(session.userId, birthDate);
-  return NextResponse.json({ ok: true });
+  try {
+    await updateUserBirthDate(session.userId, birthDate);
+    return NextResponse.json({ ok: true });
+  } catch (e) {
+    console.error("Failed to update birth date:", e);
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
+  }
 }

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { updateUserEmail } from "@/lib/db";
+import { updateUserEmail, friendlyDbErrorMessage } from "@/lib/db";
 import { checkVerificationCode } from "@/lib/verification";
 
 export const runtime = "nodejs";
@@ -17,14 +17,20 @@ export async function POST(request) {
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
   const { code } = await request.json().catch(() => ({}));
-  const result = await checkVerificationCode(session.userId, "change_email", code);
-  if (!result.ok) {
-    return NextResponse.json(
-      { error: result.error, message: ERROR_MESSAGES[result.error] || "Couldn't verify that code." },
-      { status: 400 }
-    );
-  }
 
-  await updateUserEmail(session.userId, result.newEmail);
-  return NextResponse.json({ ok: true, email: result.newEmail });
+  try {
+    const result = await checkVerificationCode(session.userId, "change_email", code);
+    if (!result.ok) {
+      return NextResponse.json(
+        { error: result.error, message: ERROR_MESSAGES[result.error] || "Couldn't verify that code." },
+        { status: 400 }
+      );
+    }
+
+    await updateUserEmail(session.userId, result.newEmail);
+    return NextResponse.json({ ok: true, email: result.newEmail });
+  } catch (e) {
+    console.error("Failed to confirm email change:", e);
+    return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
+  }
 }
