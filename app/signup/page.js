@@ -174,9 +174,12 @@ export default function SignupPage() {
             <div className="status-line warn">You must be at least {MIN_SIGNUP_AGE} to sign up.</div>
           )}
           <label>Password</label>
-          <input type="password" required minLength={8} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <input type="password" required minLength={12} value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="hint" style={{ marginTop: 4 }}>
+            At least 12 characters, with an uppercase letter, a lowercase letter, a number, and a symbol.
+          </div>
           <label>Confirm password</label>
-          <input type="password" required minLength={8} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          <input type="password" required minLength={12} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
           {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
           <button className="primary" type="submit" disabled={loading} style={{ marginTop: 18 }}>
             {loading ? "Creating account…" : "Sign up"}
