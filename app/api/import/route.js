@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
 import { getStravaConnection, updateStravaTokens, upsertActivity, countActivitiesForUser, upsertGear } from "@/lib/db";
-import { getValidAccessToken, listActivities, getActivity, getStreams, getGear } from "@/lib/strava";
+import { getValidAccessToken, listActivities, getActivity, getStreams, getGear, getAthlete } from "@/lib/strava";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Pro plan+; Hobby caps this lower regardless — see README.
@@ -28,6 +28,38 @@ export async function POST(request) {
     const { accessToken, refreshed } = await getValidAccessToken(connection);
     if (refreshed) await updateStravaTokens(session.userId, refreshed);
 
+    // The athlete's *complete* gear roster — every shoe/bike they've ever
+    // registered on Strava, not just whatever's tagged on the 30 activities
+    // being imported. Only /athlete (for the token's own owner) returns
+    // this; deriving gear purely from imported activities' gear_id would
+    // silently miss anything not worn in the last 30 activities. Runs once
+    // per import/re-sync (page 1 only), before the early-return below, so
+    // it still refreshes even when all 30 activities are already imported.
+    if (page === 1) {
+      try {
+        const athlete = await getAthlete(accessToken);
+        const gearIds = [...(athlete.shoes || []), ...(athlete.bikes || [])].map((g) => g.id);
+        for (const gearId of gearIds) {
+          try {
+            const gear = await getGear(accessToken, gearId);
+            await upsertGear(session.userId, {
+              id: gear.id,
+              gearType: String(gear.id).startsWith("b") ? "bike" : "shoe",
+              name: gear.name,
+              brandName: gear.brand_name || null,
+              modelName: gear.model_name || null,
+              distanceKm: gear.distance != null ? gear.distance / 1000 : null,
+              retired: Boolean(gear.retired),
+            });
+          } catch (e) {
+            console.error(`Failed to fetch/cache gear ${gearId}:`, e);
+          }
+        }
+      } catch (e) {
+        console.error("Failed to fetch athlete gear roster:", e);
+      }
+    }
+
     const remaining = MAX_ACTIVITIES - (page - 1) * PAGE_SIZE;
     if (remaining <= 0) {
       return NextResponse.json({ imported: 0, total: await countActivitiesForUser(session.userId), done: true });
@@ -35,7 +67,6 @@ export async function POST(request) {
 
     const summaries = await listActivities(accessToken, PAGE_SIZE, page);
     let imported = 0;
-    const gearFetchedThisRun = new Set(); // dedupe: several activities often share one shoe/bike
 
     for (const s of summaries.slice(0, remaining)) {
       const [detail, streams] = await Promise.all([
@@ -54,6 +85,7 @@ export async function POST(request) {
         avgWatts: detail.average_watts || null,
         avgSpeedKmh: detail.average_speed * 3.6,
         calories: detail.calories || null,
+        avgTempC: detail.average_temp ?? null,
         trace: {
           elevation: trim(streams.altitude?.data),
           heart_rate: trim(streams.heartrate?.data),
@@ -68,27 +100,6 @@ export async function POST(request) {
         gearId: detail.gear_id || null,
       });
       imported++;
-
-      // Gear (shoes/bikes) feeds the Equipment Lifecycle panel — fetched
-      // once per unique piece of gear per import run and cached in the
-      // `gear` table, non-fatal on failure (e.g. no gear tagged, or a
-      // "bring your own Strava app" connection missing the gear scope).
-      if (detail.gear_id && !gearFetchedThisRun.has(detail.gear_id)) {
-        gearFetchedThisRun.add(detail.gear_id);
-        try {
-          const gear = await getGear(accessToken, detail.gear_id);
-          await upsertGear(session.userId, {
-            id: gear.id,
-            gearType: String(gear.id).startsWith("b") ? "bike" : "shoe",
-            name: gear.name,
-            brandName: gear.brand_name || null,
-            modelName: gear.model_name || null,
-            distanceKm: gear.distance != null ? gear.distance / 1000 : null,
-          });
-        } catch (e) {
-          console.error(`Failed to fetch/cache gear ${detail.gear_id}:`, e);
-        }
-      }
     }
 
     const total = await countActivitiesForUser(session.userId);

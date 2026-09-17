@@ -63,6 +63,14 @@ header.top { display: flex; align-items: center; justify-content: space-between;
 .grid { display: grid; grid-template-columns: 360px 1fr; gap: 22px; }
 @media (max-width: 860px) { .grid { grid-template-columns: 1fr; } }
 
+/* dashboard: main column + a sticky right-hand equipment sidebar */
+.dashboard-grid { display: grid; grid-template-columns: 1fr 320px; gap: 22px; align-items: start; }
+.dashboard-side { position: sticky; top: 20px; }
+@media (max-width: 900px) {
+  .dashboard-grid { grid-template-columns: 1fr; }
+  .dashboard-side { position: static; }
+}
+
 .panel { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; }
 .panel + .panel { margin-top: 18px; }
 h2 { font-size: calc(14px * var(--fs-scale, 1)); font-weight: 500; margin: 0 0 14px 0; color: var(--ink-dim); }
@@ -229,11 +237,6 @@ input::placeholder { color: var(--ink-dim); }
 .pace-time { font-family: var(--font-mono); font-size: calc(19px * var(--fs-scale, 1)); font-weight: 600; color: var(--ink); margin-top: 4px; }
 @media (max-width: 600px) { .pace-grid { grid-template-columns: repeat(2, 1fr); } }
 
-.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; margin-top: 18px; }
-.gallery-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
-.gallery-card img { width: 100%; display: block; }
-.gallery-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; font-size: calc(12.5px * var(--fs-scale, 1)); }
-.gallery-card-footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
 /* account nav */
 header.top nav.navlinks { gap: 14px; }
@@ -256,7 +259,8 @@ header.top nav.navlinks .tagline { text-align: left; max-width: none; }
 @media (max-width: 860px) { .ai-columns { grid-template-columns: 1fr; } }
 
 /* equipment lifecycle */
-.equipment-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 14px; }
+.equipment-list { display: flex; flex-direction: column; gap: 16px; margin-top: 14px; }
+.equipment-list-scroll { max-height: 70vh; overflow-y: auto; padding-right: 4px; }
 .equipment-item { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
 .equipment-item-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: calc(14px * var(--fs-scale, 1)); color: var(--ink); }
 .equipment-status {

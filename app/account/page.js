@@ -360,9 +360,12 @@ export default function AccountPage() {
           <label>Current password</label>
           <input type="password" value={currentPassword} onChange={(e) => setCurrentPassword(e.target.value)} />
           <label>New password</label>
-          <input type="password" minLength={8} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <input type="password" minLength={12} required value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          <div className="hint" style={{ marginTop: 4 }}>
+            At least 12 characters, with an uppercase letter, a lowercase letter, a number, and a symbol.
+          </div>
           <label>Confirm new password</label>
-          <input type="password" minLength={8} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          <input type="password" minLength={12} required value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
           {pwStatus && <div className={`status-line${pwWarn ? " warn" : ""}`}>{pwStatus}</div>}
           <button className="primary" type="submit" disabled={pwSaving} style={{ marginTop: 12 }}>
             {pwSaving ? "Saving…" : "Update password"}

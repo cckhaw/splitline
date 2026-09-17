@@ -4,6 +4,7 @@ import { createUser, getUserByEmail, updateUserName, updateUserPassword, updateU
 import { issueVerificationCode } from "@/lib/verification";
 import { ageFromBirthDate } from "@/lib/insights";
 import { betaSignupTierGrant } from "@/lib/membership";
+import { isValidPassword, PASSWORD_REQUIREMENTS_TEXT } from "@/lib/password";
 
 export const runtime = "nodejs";
 
@@ -18,8 +19,8 @@ export async function POST(request) {
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
     return NextResponse.json({ error: "invalid_email", message: "Enter a valid email address." }, { status: 400 });
   }
-  if (!password || password.length < 8) {
-    return NextResponse.json({ error: "weak_password", message: "Password needs to be at least 8 characters." }, { status: 400 });
+  if (!isValidPassword(password)) {
+    return NextResponse.json({ error: "weak_password", message: PASSWORD_REQUIREMENTS_TEXT }, { status: 400 });
   }
   if (password !== confirmPassword) {
     return NextResponse.json({ error: "password_mismatch", message: "Passwords don't match." }, { status: 400 });
