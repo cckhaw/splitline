@@ -10,23 +10,6 @@ const ERROR_MESSAGES = {
   access_denied: "Strava access wasn't granted, so there's nothing to import yet.",
 };
 
-function ExportImageRow({ orientation, onOrientationChange, onExport, exporting }) {
-  return (
-    <div className="export-row" style={{ alignItems: "center" }}>
-      <div className="toggle-group">
-        {["portrait", "landscape"].map((o) => (
-          <div key={o} className={`toggle${orientation === o ? " active" : ""}`} onClick={() => onOrientationChange(o)}>
-            {o[0].toUpperCase() + o.slice(1)}
-          </div>
-        ))}
-      </div>
-      <button style={{ width: "auto", padding: "7px 14px" }} onClick={onExport} disabled={exporting}>
-        {exporting ? "Exporting…" : "Export image"}
-      </button>
-    </div>
-  );
-}
-
 async function mapWithConcurrency(items, limit, fn) {
   const results = new Array(items.length);
   let next = 0;
@@ -58,13 +41,10 @@ export default function Dashboard() {
   const [previews, setPreviews] = useState({});
   const [insights, setInsights] = useState(null);
   const [refreshingAi, setRefreshingAi] = useState(false);
+  const [equipment, setEquipment] = useState(null);
 
   const [theme, setTheme] = useState("ink");
   const [units, setUnits] = useState("metric");
-
-  const [predictionOrientation, setPredictionOrientation] = useState("portrait");
-  const [injuryOrientation, setInjuryOrientation] = useState("portrait");
-  const [exportingSection, setExportingSection] = useState(null); // 'prediction' | 'injury' | null
 
   const loadMe = useCallback(async () => {
     const res = await fetch("/api/me");
@@ -144,11 +124,16 @@ export default function Dashboard() {
   }
 
   async function loadActivitiesAndInsights() {
-    const [actRes, insRes] = await Promise.all([fetch("/api/activities"), fetch("/api/insights")]);
+    const [actRes, insRes, equipRes] = await Promise.all([
+      fetch("/api/activities"),
+      fetch("/api/insights"),
+      fetch("/api/equipment"),
+    ]);
     const actData = await actRes.json();
     const insData = await insRes.json();
     setActivities(actData.activities || []);
     setInsights(insData);
+    setEquipment(equipRes.ok ? await equipRes.json() : null);
     await loadPreviews(actData.activities || [], theme, units);
   }
 
@@ -201,36 +186,6 @@ export default function Dashboard() {
     document.body.appendChild(a);
     a.click();
     a.remove();
-  }
-
-  async function exportInsightImage(section, orientation) {
-    setExportingSection(section);
-    setStatusWarn(false);
-    try {
-      const theme = document.documentElement.getAttribute("data-theme") || "dark";
-      const res = await fetch("/api/insights/export", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ section, orientation, format: "png", theme }),
-      });
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.message || "Couldn't export that image.");
-      }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `splitline-${section}-${orientation}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-    } catch (e) {
-      setStatusWarn(true);
-      setStatus(e.message);
-    } finally {
-      setExportingSection(null);
-    }
   }
 
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
@@ -288,6 +243,49 @@ export default function Dashboard() {
         </div>
       )}
 
+      {activities.length > 0 && (
+        <>
+          <div className="panel">
+            <h2 style={{ margin: 0 }}>Telemetry overlays</h2>
+            <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
+              A cockpit-readout card for each of your last {activities.length} activities — pace, power, heart rate,
+              and the trace itself, styled from your own numbers. Save one and post it straight to your Strava feed.
+            </div>
+            <div className="toggle-group" style={{ marginBottom: 4 }}>
+              {["ink", "paper", "signal"].map((k) => (
+                <div key={k} className={`toggle${theme === k ? " active" : ""}`} onClick={() => changeTheme(k)}>
+                  {k[0].toUpperCase() + k.slice(1)}
+                </div>
+              ))}
+              <div style={{ width: 16 }} />
+              {["metric", "imperial"].map((k) => (
+                <div key={k} className={`toggle${units === k ? " active" : ""}`} onClick={() => changeUnits(k)}>
+                  {k === "metric" ? "km · kg" : "mi · lb"}
+                </div>
+              ))}
+              <div style={{ flex: 1 }} />
+              <button style={{ width: "auto", padding: "7px 14px" }} onClick={runImport} disabled={importing}>
+                Re-sync
+              </button>
+            </div>
+          </div>
+
+          <div className="gallery">
+            {activities.map((a) => (
+              <div key={a.id} className="gallery-card">
+                {previews[a.id] ? <img src={previews[a.id]} alt={a.name} /> : <div className="status-line">Rendering…</div>}
+                <div className="gallery-card-footer">
+                  <span>{a.name}</span>
+                  <button style={{ width: "auto", padding: "6px 12px" }} onClick={() => savePng(a.id, a.name)}>
+                    Save PNG
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+
       {insights && activities.length > 0 && (
         <div className="panel insights">
           <h2>Training load</h2>
@@ -317,20 +315,13 @@ export default function Dashboard() {
               </div>
             </>
           )}
-
-          <ExportImageRow
-            orientation={predictionOrientation}
-            onOrientationChange={setPredictionOrientation}
-            onExport={() => exportInsightImage("prediction", predictionOrientation)}
-            exporting={exportingSection === "prediction"}
-          />
         </div>
       )}
 
       {insights && activities.length > 0 && (
         <div className="panel">
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-            <h2 style={{ margin: 0 }}>Injury risk, recovery &amp; nutrition</h2>
+            <h2 style={{ margin: 0 }}>Biomechanical &amp; Overtraining Shield</h2>
             <button
               style={{ width: "auto", padding: "6px 12px" }}
               onClick={refreshAiInsights}
@@ -340,6 +331,41 @@ export default function Dashboard() {
               {refreshingAi ? "Analyzing…" : "Refresh AI analysis"}
             </button>
           </div>
+          <div className="hint" style={{ marginTop: 6 }}>
+            Physics-based signals computed from your own activity streams — aerobic decoupling, cadence drift,
+            and workload ramp — interpreted below into a risk read, recovery plan, and nutrition guidance.
+          </div>
+
+          {insights.biomechanics && (
+            <div className="pace-grid" style={{ marginTop: 14, gridTemplateColumns: "repeat(3, 1fr)" }}>
+              <div className="pace-cell">
+                <div className="hint">Acute:chronic load</div>
+                <div className="pace-time">{insights.load.acwr != null ? insights.load.acwr : "—"}</div>
+              </div>
+              <div className="pace-cell">
+                <div className="hint">Aerobic decoupling (30d)</div>
+                <div className="pace-time">
+                  {insights.biomechanics.windows.last30Days.avgDecouplingPct != null
+                    ? `${insights.biomechanics.windows.last30Days.avgDecouplingPct}%`
+                    : "—"}
+                </div>
+              </div>
+              <div className="pace-cell">
+                <div className="hint">Cadence drift (30d)</div>
+                <div className="pace-time">
+                  {insights.biomechanics.windows.last30Days.avgCadenceDriftPct != null
+                    ? `${insights.biomechanics.windows.last30Days.avgCadenceDriftPct}%`
+                    : "—"}
+                </div>
+              </div>
+            </div>
+          )}
+          {insights.biomechanics && insights.biomechanics.windows.last30Days.readableActivities === 0 && (
+            <div className="hint" style={{ marginTop: 8 }}>
+              Decoupling and cadence drift need sustained efforts (18+ minutes) with heart-rate plus pace, power,
+              or cadence data — none of your recent activities have enough of that yet.
+            </div>
+          )}
 
           {insights.ageSource === "unavailable" && (
             <div className="hint" style={{ marginTop: 10 }}>
@@ -377,17 +403,24 @@ export default function Dashboard() {
                   <ul>{insights.ai.nutrition_plan.map((f, i) => <li key={i}>{f}</li>)}</ul>
                 </div>
               </div>
+
+              {insights.ai.training_adjustment && insights.ai.training_adjustment.length > 0 && (
+                <>
+                  <h2 style={{ marginTop: 20 }}>Recommended training adjustment</h2>
+                  <ul style={{ margin: 0, paddingLeft: 18, fontSize: "calc(13px * var(--fs-scale, 1))", lineHeight: 1.6 }}>
+                    {insights.ai.training_adjustment.map((f, i) => <li key={i} style={{ marginBottom: 6 }}>{f}</li>)}
+                  </ul>
+                  <div className="hint" style={{ marginTop: 8 }}>
+                    This doesn&rsquo;t change your saved plan automatically — head to{" "}
+                    <a href="/training-plan">Training plan</a> to update it if you agree.
+                  </div>
+                </>
+              )}
+
               <div className="hint" style={{ marginTop: 12 }}>
                 {insights.aiStale ? "Showing the last successful analysis — the latest refresh failed. " : ""}
                 Generated by an AI model from your recent training patterns — a wellness heuristic, not medical advice.
               </div>
-
-              <ExportImageRow
-                orientation={injuryOrientation}
-                onOrientationChange={setInjuryOrientation}
-                onExport={() => exportInsightImage("injury", injuryOrientation)}
-                exporting={exportingSection === "injury"}
-              />
             </>
           ) : (
             <div className="hint" style={{ marginTop: 10 }}>
@@ -399,42 +432,54 @@ export default function Dashboard() {
         </div>
       )}
 
-      {activities.length > 0 && (
-        <>
-          <div className="panel">
-            <div className="toggle-group" style={{ marginBottom: 10 }}>
-              {["ink", "paper", "signal"].map((k) => (
-                <div key={k} className={`toggle${theme === k ? " active" : ""}`} onClick={() => changeTheme(k)}>
-                  {k[0].toUpperCase() + k.slice(1)}
-                </div>
-              ))}
-              <div style={{ width: 16 }} />
-              {["metric", "imperial"].map((k) => (
-                <div key={k} className={`toggle${units === k ? " active" : ""}`} onClick={() => changeUnits(k)}>
-                  {k === "metric" ? "km · kg" : "mi · lb"}
-                </div>
-              ))}
-              <div style={{ flex: 1 }} />
-              <button style={{ width: "auto", padding: "7px 14px" }} onClick={runImport} disabled={importing}>
-                Re-sync
-              </button>
-            </div>
+      {equipment && equipment.items.length > 0 && (
+        <div className="panel">
+          <h2>Equipment Lifecycle &amp; Telemetry</h2>
+          <div className="hint" style={{ marginTop: 6, marginBottom: 4 }}>
+            Wear estimated from Strava&rsquo;s own gear mileage — shoe foam compression scaled to your body
+            weight if you&rsquo;ve added it, bike chain wear from typical drivetrain mileage.
+            {!equipment.weightOnFile && (
+              <> <a href="/account">Add your weight</a> for a sharper shoe estimate.</>
+            )}
           </div>
-
-          <div className="gallery">
-            {activities.map((a) => (
-              <div key={a.id} className="gallery-card">
-                {previews[a.id] ? <img src={previews[a.id]} alt={a.name} /> : <div className="status-line">Rendering…</div>}
-                <div className="gallery-card-footer">
-                  <span>{a.name}</span>
-                  <button style={{ width: "auto", padding: "6px 12px" }} onClick={() => savePng(a.id, a.name)}>
-                    Save PNG
-                  </button>
+          <div className="equipment-list">
+            {equipment.items.map((item) => (
+              <div key={item.id} className="equipment-item">
+                <div className="equipment-item-head">
+                  <span>{item.name || (item.gearType === "bike" ? "Bike" : "Shoes")}</span>
+                  <span className={`equipment-status equipment-status-${item.status}`}>
+                    {item.status === "replace" ? "Replace soon" : item.status === "watch" ? "Nearing replacement" : "Healthy"}
+                  </span>
                 </div>
+                <div className="progress-track">
+                  <div
+                    className={`progress-fill${item.status !== "healthy" ? " progress-fill-warn" : ""}`}
+                    style={{ width: `${Math.min(100, item.percentUsed)}%` }}
+                  />
+                </div>
+                <div className="hint" style={{ marginTop: 4 }}>
+                  {item.distanceKm}km of an estimated {item.thresholdKm}km ({item.percentUsed}%)
+                </div>
+                <div className="hint" style={{ marginTop: 6, color: "var(--ink)" }}>{item.recommendation}</div>
+                {item.shopUrl && (
+                  <a href={item.shopUrl} target="_blank" rel="noreferrer" style={{ fontSize: "calc(12.5px * var(--fs-scale, 1))" }}>
+                    Shop replacement options →
+                  </a>
+                )}
               </div>
             ))}
           </div>
-        </>
+        </div>
+      )}
+
+      {equipment && equipment.items.length === 0 && activities.length > 0 && (
+        <div className="panel">
+          <h2>Equipment Lifecycle &amp; Telemetry</h2>
+          <div className="hint" style={{ marginTop: 6 }}>
+            No gear tagged on your imported activities yet — add shoes or a bike to your activities in Strava,
+            then hit Re-sync above to start tracking wear.
+          </div>
+        </div>
       )}
     </div>
   );

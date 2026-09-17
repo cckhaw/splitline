@@ -21,7 +21,7 @@ export default function TopNav() {
     return () => document.removeEventListener("mousedown", onClickOutside);
   }, []);
 
-  const trainingActive = pathname === "/training-plan";
+  const trainingActive = pathname === "/training-plan" || pathname === "/race-day";
 
   return (
     <nav className="top-nav">
@@ -39,6 +39,7 @@ export default function TopNav() {
         {trainingOpen && (
           <div className="top-nav-dropdown">
             <Link href="/training-plan" onClick={() => setTrainingOpen(false)}>Training plan</Link>
+            <Link href="/race-day" onClick={() => setTrainingOpen(false)}>Race-day plan</Link>
           </div>
         )}
       </div>

@@ -128,7 +128,6 @@ input::placeholder { color: var(--ink-dim); }
 .canvas-wrap { display: flex; align-items: center; justify-content: center; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; min-height: 420px; }
 .canvas-wrap img { width: 100%; max-width: 420px; height: auto; border-radius: 2px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
 
-.export-row { display: flex; gap: 10px; margin-top: 16px; }
 .hint { font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); margin-top: 8px; line-height: 1.5; }
 .hint a { color: var(--amber); text-decoration: none; border-bottom: 1px solid rgba(239,163,59,0.4); }
 
@@ -255,6 +254,19 @@ header.top nav.navlinks .tagline { text-align: left; max-width: none; }
 .ai-columns ul { margin: 0; padding-left: 18px; font-size: calc(13px * var(--fs-scale, 1)); line-height: 1.6; color: var(--ink); }
 .ai-columns li { margin-bottom: 6px; }
 @media (max-width: 860px) { .ai-columns { grid-template-columns: 1fr; } }
+
+/* equipment lifecycle */
+.equipment-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 16px; margin-top: 14px; }
+.equipment-item { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; }
+.equipment-item-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; margin-bottom: 8px; font-size: calc(14px * var(--fs-scale, 1)); color: var(--ink); }
+.equipment-status {
+  font-size: calc(11px * var(--fs-scale, 1)); font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 3px 8px; border-radius: var(--radius); white-space: nowrap;
+}
+.equipment-status-healthy { color: var(--teal); background: rgba(76,156,147,0.1); }
+.equipment-status-watch { color: var(--amber); background: rgba(239,163,59,0.1); }
+.equipment-status-replace { color: var(--coral); background: rgba(210,96,75,0.1); }
+.progress-fill-warn { background: var(--coral); }
 
 /* training plan */
 h3 { font-size: calc(12.5px * var(--fs-scale, 1)); font-weight: 500; color: var(--ink-dim); margin: 0 0 10px; text-transform: uppercase; letter-spacing: 0.03em; }

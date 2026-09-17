@@ -167,17 +167,54 @@ the *new* address), and password. There's still no self-service
 "forgot password" flow — add one before a public launch if you don't
 want support tickets over locked-out accounts.
 
-## Injury-risk, recovery, and nutrition — and a real limitation on "age from Strava"
+## Dashboard layout: telemetry overlays first
 
-The dashboard's "Injury risk, recovery & nutrition" panel sends an
-aggregated statistical summary of the athlete's last 30 imported
-activities — weekly volume, rest-day frequency, training-load trend,
-sport mix, recent vs. prior heart rate, age if known — to Claude
-(`lib/anthropic.js`, requires `ANTHROPIC_API_KEY`), which returns a
-structured risk level/score, specific risk factors, and a recovery and
-nutrition plan grounded in those numbers. It's a wellness heuristic
-written by an LLM, not a medical assessment, and the UI keeps that
-disclaimer visible.
+The dashboard leads with the **telemetry overlay gallery** — a
+cockpit-readout card per imported activity (pace/power/heart rate hero
+metric, the trace itself, three themes) meant to be saved and posted
+straight to a Strava feed. Everything else (training load, the
+Biomechanical Shield, equipment lifecycle) renders below it, once
+there's data to compute from. This was originally built first but shown
+last; it's the actual hero feature, so it's now the first thing shown
+once Strava is connected and activities are imported.
+
+## Biomechanical & Overtraining Shield — and a real limitation on "age from Strava"
+
+The dashboard's "Biomechanical & Overtraining Shield" panel is a
+**physics-model + LLM** hybrid, not an LLM guessing from raw numbers:
+
+- **Physics model** (`lib/biomechanics.js`, deterministic, no API
+  calls): computes **aerobic decoupling** (a Pw:HR/Pa:HR efficiency
+  ratio compared between the first and second half of each sustained
+  effort — cardiac drift for the same output is a well-known aerobic-
+  fatigue signal) and **cadence drift** (stride/pedal rate falling late
+  in an effort, a form-breakdown proxy), aggregated across rolling
+  7/30/60/90-day windows of whatever's actually been imported. Both
+  numbers are shown directly on the dashboard regardless of whether the
+  AI call below succeeds, fails, or is rate-limited — they cost nothing
+  and need no LLM to be useful. This needs `time`, `heartrate`,
+  `velocity_smooth`/`watts`, and `cadence` streams, which `/api/import`
+  now requests from Strava and stores (trimmed, like the existing
+  elevation/heart-rate/power arrays) in `activities.trace`; activities
+  imported before this feature shipped won't have them until re-synced.
+  The **acute:chronic workload ratio** (ACWR, from the training-load
+  panel) rounds out the physics layer — above ~1.5 is a commonly-cited
+  sudden-spike injury-risk range.
+- **LLM layer** (`lib/anthropic.js`, Claude, requires
+  `ANTHROPIC_API_KEY`): given the athlete's aggregated activity summary
+  *plus* those deterministic decoupling/cadence/ACWR numbers, returns a
+  structured risk level/score, specific risk factors (grounded in the
+  actual physics numbers when they're notable), a recovery and nutrition
+  plan, and an optional `training_adjustment` — a few concrete near-term
+  training tweaks, populated only when the data actually signals a
+  problem. This is a wellness heuristic written by an LLM, not a medical
+  assessment, and the UI keeps that disclaimer visible.
+
+`training_adjustment` deliberately does **not** rewrite the athlete's
+saved training plan automatically — it's shown as guidance with a link
+to the Training plan page. Auto-mutating a saved plan from a background
+signal is exactly the kind of surprising, hard-to-review automated
+action this app avoids; a human confirms the change instead.
 
 **Age does not actually come from Strava.** Strava's public API
 (`GET /athlete`) does not return date of birth for any account — it
@@ -194,6 +231,73 @@ when the underlying activity summary actually changes, or when the
 dashboard's "Refresh AI analysis" button is clicked — the model isn't
 called on every page load.
 
+## Equipment Lifecycle & Telemetry
+
+A dashboard panel estimating wear on the athlete's Strava-tagged gear
+(shoes and bikes) — **entirely deterministic, no LLM call**: the
+underlying logic (mileage ÷ a lifespan threshold) is formulaic rule
+evaluation, not something a language model improves, so this panel
+costs nothing against the membership tiers' AI budget.
+
+- `/api/import` reads each activity's `gear_id` and fetches/caches the
+  gear's own lifetime distance from Strava's `/gear/{id}` endpoint (a
+  `gear` table, keyed by user + Strava gear id) — the wear estimate uses
+  Strava's own lifetime mileage for that shoe/bike, not just what's
+  visible in the last 30 imported activities.
+- `lib/equipment.js` estimates a shoe's midsole lifespan at 700km by
+  default, scaled down for body weight above a 70kg reference (self-
+  reported, optional — same "Strava doesn't expose this" reasoning as
+  birth date, see above; account page has a "Body weight" field), and a
+  bike's chain-wear mileage at a flat 3000km. 85%+ of that threshold is
+  flagged "nearing replacement", 100%+ "replace soon", matching the
+  original spec's 85% figure.
+- Flagged gear gets a **"Shop replacement options"** link — a plain
+  Google Shopping search built from the gear's brand/model, opened in a
+  new tab. This is deliberately informational only: no affiliate
+  account, no automated purchase, no real transaction of any kind.
+  Automating an actual purchase — spending the athlete's money without
+  them explicitly clicking through and choosing — is exactly the kind
+  of irreversible action this app avoids taking on someone's behalf.
+
+## Race-day plan
+
+Under the top nav's **Training** menu, a page that turns the athlete's
+saved event (from Training plan) plus race-day conditions they enter
+themselves into an AI-generated pacing and fueling plan
+(`lib/anthropic.js`'s `generateRaceDayPlan`, requires
+`ANTHROPIC_API_KEY`): overall pacing strategy, target pace per segment,
+a timed fueling/hydration plan, heat/altitude adjustments, a pre-race
+checklist, and contingency notes. Tier-gated and cached exactly like the
+training plan (`race_day_plans` table, `ai_usage` feature `race_day`) —
+regenerating only actually calls Claude when the goal, the athlete's
+activity data, or the entered conditions have changed.
+
+`lib/raceDay.js` derives a **grade-adjusted pace factor** — how much
+this specific athlete's pace slows per 1% of average uphill grade —
+from their own flat-vs-hilly run history when there's enough of it
+(`basis: "athlete_history"`), falling back to a documented ~3%-per-1%
+heuristic otherwise (`basis: "default_heuristic"`); the LLM is told
+which basis was used. This is intentionally simpler than a true grade-
+adjusted-pace model: only whole-activity average distance/elevation/time
+are stored, not per-kilometer splits, so it's a coarse comparison, not a
+Strava-grade-adjusted-pace-equivalent calculation.
+
+Three things in the original spec for this feature are **not** built,
+and don't have a reasonable path to being built inside a Next.js web
+dashboard:
+
+- **No GPX course upload.** The athlete enters total course elevation
+  gain as a plain number instead of uploading a course file for the app
+  to parse.
+- **No live weather pull.** No weather API key exists in this
+  environment; the athlete enters an expected temperature/humidity
+  themselves rather than the app fetching a forecast.
+- **No real-time audio cues.** That needs a native/mobile companion
+  app doing GPS-triggered audio playback *during* the actual race — a
+  fundamentally different piece of software than a web dashboard can
+  provide. The plan instead renders on-page and downloads as a plain
+  text pace/fueling sheet.
+
 ## Light/dark appearance
 
 A theme toggle appears on every page: a standalone button
@@ -209,58 +313,16 @@ why `<html>` carries `suppressHydrationWarning`. Light mode reuses the
 same warm-paper palette as the "paper" overlay card theme, so the brand
 stays consistent across both surfaces.
 
-The dashboard header itself is a single control: clicking the athlete's
-name opens a dropdown (Training plan, My account, Light/dark mode, Log
-out) instead of spreading those as flat links — `components/UserMenu.js`.
-
-## Exporting the prediction and injury panels as social images
-
-Both the "Training load & race pace" panel and the "Injury risk, recovery
-& nutrition" panel have a portrait/landscape toggle and an "Export image"
-button. This hits `/api/insights/export`, which rebuilds the panel as a
-real flexbox layout via [satori](https://github.com/vercel/satori) — the
-same engine behind `next/og` — and rasterizes it to PNG with
-`lib/renderPng.js` (`@resvg/resvg-js`). Portrait exports at 1080×1920
-(9:16) and landscape at 1920×1080 (16:9). The injury card renders from
-whatever AI analysis is currently cached, so generate or refresh that
-panel first if there isn't one yet.
-
-Two things make this behave like an actual screenshot rather than a
-generic export:
-
-- **Theme-aware.** The client sends whatever theme (`dark`/`light`) is
-  currently active on `<html>`, and the card is built from that same
-  palette (`lib/theme.js`) — export a card in light mode and it comes
-  back light, not always dark.
-- **Responsive by construction.** Satori/resvg don't run a browser, so
-  there's no media query to fire — instead `lib/insightCard.js` picks the
-  layout directly from the orientation being rendered: portrait uses the
-  same 2-column pace grid / single-column risk-factor stack the site's
-  own CSS switches to below its `860px`/`600px` breakpoints, landscape
-  uses the 4-column / 3-column desktop layout. Text wraps naturally
-  within satori's flexbox, so there's no manual line-wrapping logic to
-  maintain the way a hand-positioned SVG would need.
-
-Rasterizing to PNG bundles the app's actual type files
-(`assets/fonts/*.ttf` — Space Grotesk and IBM Plex Mono, both SIL Open
-Font License) rather than asking the renderer to find "Space Grotesk" /
-"IBM Plex Mono" among the system's installed fonts. That distinction
-matters in production: Vercel's serverless runtime has no system fonts
-at all, so `loadSystemFonts` finds nothing to match, and every text
-element silently renders as invisible — the background renders fine, but
-the exported card comes back blank. `next.config.mjs` handles two
-related build-time gotchas this introduced: `outputFileTracingIncludes`
-makes sure the `.ttf` files actually ship with the deployed function
-(they're read via `fs` at runtime, not imported, so Next's tracer won't
-find them on its own), and `serverExternalPackages` keeps `satori` (and
-its `harfbuzzjs` WASM dependency) out of the bundler entirely — bundling
-it rewrites the path it loads `hb.wasm` from to something that doesn't
-exist at runtime.
+Every page behind login shares one header (`components/AppHeader.js`):
+the wordmark, a persistent primary nav (Dashboard, Training) next to it
+(`components/TopNav.js`), and the athlete's name/tier on the right, which
+opens a dropdown (My account, Light/dark mode, font size, Log out)
+instead of spreading those as flat links — `components/UserMenu.js`.
 
 ## Training plan for an upcoming event
 
-The dashboard's hamburger menu (click the athlete's name, top right) has
-a **Training plan** link that takes an athlete to set one upcoming event
+The top nav's **Training** menu has a **Training plan** link that takes
+an athlete to set one upcoming event
 — a running race, duathlon, or triathlon, with a required name, a
 distance chosen from a dropdown scoped to that event type, and a goal
 finish time chosen from a dropdown scoped to that distance
@@ -456,6 +518,19 @@ show (or hide) the beta banner, so turning it off there is automatic too.
   `customer.subscription.deleted` — a failed renewal charge doesn't
   currently downgrade the user or prompt them to update their card
   until the subscription is fully cancelled.
+- **Gear data only populates on (re-)import.** Activities imported
+  before the Equipment Lifecycle feature shipped won't show gear until
+  the athlete hits Re-sync, which re-fetches each activity's detail
+  (including `gear_id`) from Strava.
+- **Decoupling/cadence-drift need real streams to say anything.** Short
+  or interval activities, or ones missing heart-rate plus pace/power/
+  cadence data, simply don't produce a reading for that activity — the
+  panel says so rather than guessing from insufficient data.
+- **The grade-adjustment factor behind the race-day plan is coarse.**
+  It's derived from whole-activity average pace/elevation, not
+  per-kilometer splits (none are stored), so it's a directional
+  comparison of the athlete's own hilly vs. flat runs, not a precise
+  grade-adjusted-pace model.
 
 ## Local development
 

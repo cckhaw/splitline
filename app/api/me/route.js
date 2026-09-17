@@ -21,6 +21,7 @@ export async function GET(request) {
       emailVerified: user?.email_verified,
       hasGoogleLogin: Boolean(user?.google_id),
       birthDate: user?.birth_date,
+      weightKg: user?.weight_kg,
       tier: resolveEffectiveTier(user),
       tierExpiresAt: user?.tier_expires_at,
       isTrial: isTrialTier(user),

@@ -41,6 +41,7 @@ export async function GET(request) {
     sampleSize: activities.length,
     ageYears: summary.ageYears,
     ageSource: summary.ageSource,
+    biomechanics: summary.biomechanics,
     tier,
   };
 
