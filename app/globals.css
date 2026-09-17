@@ -8,7 +8,7 @@
   --teal: #4C9C93;
   --coral: #D2604B;
   --radius: 3px;
-  --font-head: 'Manrope', Arial, sans-serif;
+  --font-head: -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
   --fs-scale: 1; /* adjustable via the hamburger menu's font-size control */
   color-scheme: dark;
