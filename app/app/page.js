@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import TelemetryPanel from "@/components/TelemetryPanel";
 import SiteFooter from "@/components/SiteFooter";
@@ -401,6 +402,7 @@ export default function Dashboard() {
                 period, a fatigue read on how recently and how hard you've been training, and an intensity trend
                 across the period. Weather/humidity aren't shown — Strava only occasionally records a device
                 temperature, and there's no live weather source wired up.
+                {" "}<Link href="/activities">See each activity&rsquo;s own card — Last 30 Activities →</Link>
               </div>
               <div className="toggle-group" style={{ marginBottom: 12 }}>
                 {["ink", "paper", "signal"].map((k) => (

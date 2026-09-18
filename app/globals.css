@@ -192,6 +192,13 @@ input::placeholder { color: var(--ink-dim); }
 .canvas-wrap { display: flex; align-items: center; justify-content: center; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; min-height: 420px; }
 .canvas-wrap img { width: 100%; max-width: 420px; height: auto; border-radius: 2px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
 
+/* per-activity card gallery — app/activities/page.js ("Last 30 Activities") */
+.gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; margin-top: 18px; }
+.gallery-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.gallery-card img { width: 100%; display: block; }
+.gallery-card-footer { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding: 10px 12px; font-size: calc(12.5px * var(--fs-scale, 1)); }
+.gallery-card-footer span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .hint { font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); margin-top: 8px; line-height: 1.5; }
 .hint a { color: var(--brand); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--brand) 40%, transparent); }
 
@@ -275,6 +282,23 @@ input::placeholder { color: var(--ink-dim); }
   border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
   box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 35%, transparent);
 }
+
+/* mobile-only nav-in-menu (components/MobileNavMenu.js) — at phone widths
+   TopNav's Dashboard/Training row doesn't fit next to the wordmark without
+   wrapping, which was throwing the hamburger dropdown's position off; below
+   this breakpoint the same links move inside the hamburger menu instead. */
+.mobile-nav-menu { display: none; }
+@media (max-width: 640px) {
+  .top-nav { display: none; }
+  .mobile-nav-menu { display: block; }
+}
+.mobile-nav-trigger { justify-content: space-between; }
+.mobile-nav-trigger .caret { font-size: calc(10px * var(--fs-scale, 1)); color: var(--ink-dim); }
+.mobile-nav-menu a.active, .mobile-nav-menu .user-menu-item.active { color: var(--brand); }
+.mobile-nav-menu .nested { padding-left: 32px; color: var(--ink-dim); font-size: calc(13px * var(--fs-scale, 1)); }
+.mobile-nav-menu .nested.active { color: var(--brand); }
+.mobile-nav-divider { height: 1px; background: var(--line); margin: 6px 0 0; }
+.user-menu-dropdown .user-menu-profile { border-top: none; }
 .foot {
   display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px 20px;
   font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); border-top: 1px solid var(--line);

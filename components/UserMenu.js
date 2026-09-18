@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Avatar from "@/components/Avatar";
 import ThemeIcon from "@/components/ThemeIcon";
+import MobileNavMenu from "@/components/MobileNavMenu";
 import { FONT_SIZE_STORAGE_KEY, FONT_SIZE_MIN, FONT_SIZE_MAX, FONT_SIZE_STEP, FONT_SIZE_DEFAULT, clampFontScale } from "@/lib/fontSize";
 
 export const THEME_STORAGE_KEY = "splitline_theme";
@@ -84,6 +85,7 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, res
       </button>
       {open && (
         <div className="user-menu-dropdown">
+          <MobileNavMenu onNavigate={() => setOpen(false)} />
           <div className="user-menu-profile">
             <Avatar src={avatarUrl} name={name} size={36} />
             <div>
