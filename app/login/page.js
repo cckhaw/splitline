@@ -86,10 +86,7 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <label>Email</label>
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-            <label>Password</label>
-            <Link href="/forgot-password" style={{ fontSize: "calc(12.5px * var(--fs-scale, 1))" }}>Forgot password?</Link>
-          </div>
+          <label>Password</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
           {needsVerification && (
@@ -102,8 +99,9 @@ export default function LoginPage() {
             {loading ? "Logging in…" : "Log in"}
           </button>
         </form>
-        <div className="hint" style={{ marginTop: 14 }}>
-          New here? <Link href="/signup">Sign up free</Link>
+        <div className="hint" style={{ marginTop: 14, display: "flex", justifyContent: "space-between" }}>
+          <span>New here? <Link href="/signup">Sign up free</Link></span>
+          <Link href="/forgot-password">Forgot password?</Link>
         </div>
       </div>
       <SiteFooter />
