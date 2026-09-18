@@ -6,7 +6,7 @@ import UserMenu from "@/components/UserMenu";
 // account) — wordmark + primary nav on the left, identity/hamburger menu
 // on the right. One component so the nav can't drift out of sync between
 // pages the way three hand-rolled headers eventually would.
-export default function AppHeader({ name, tier, isTrial, avatarUrl }) {
+export default function AppHeader({ name, tier, isTrial, avatarUrl, onResync, resyncing }) {
   return (
     <header className="top">
       <div className="top-left">
@@ -17,7 +17,7 @@ export default function AppHeader({ name, tier, isTrial, avatarUrl }) {
         <TopNav />
       </div>
       <nav className="navlinks">
-        <UserMenu name={name} tier={tier} isTrial={isTrial} avatarUrl={avatarUrl} />
+        <UserMenu name={name} tier={tier} isTrial={isTrial} avatarUrl={avatarUrl} onResync={onResync} resyncing={resyncing} />
       </nav>
     </header>
   );

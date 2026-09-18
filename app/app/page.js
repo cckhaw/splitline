@@ -55,8 +55,14 @@ export default function Dashboard() {
       setStatus(ERROR_MESSAGES[err] || `Couldn't connect to Strava (${err}).`);
       window.history.replaceState({}, "", "/app");
     }
+    // "Re-sync from Strava" in the hamburger menu links here from other
+    // pages (it can only run the import directly when already on the
+    // dashboard) — this picks that request back up once loaded.
+    const wantsResync = params.get("resync") === "1";
+    if (wantsResync) window.history.replaceState({}, "", "/app");
     loadMe().then((data) => {
-      if (data?.stravaConnected && data.activityCount > 0) loadActivitiesAndInsights();
+      if (data?.stravaConnected && wantsResync) runImport();
+      else if (data?.stravaConnected && data.activityCount > 0) loadActivitiesAndInsights();
     });
   }, [loadMe]);
 
@@ -187,7 +193,7 @@ export default function Dashboard() {
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} />
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} onResync={runImport} resyncing={importing} />
 
       {status && <div className={`status-line${statusWarn ? " warn" : ""}`} style={{ marginBottom: 16 }}>{status}</div>}
 
@@ -407,10 +413,6 @@ export default function Dashboard() {
                     {k === "metric" ? "km · kg" : "mi · lb"}
                   </div>
                 ))}
-                <div style={{ flex: 1 }} />
-                <button style={{ width: "auto", padding: "7px 14px" }} onClick={runImport} disabled={importing}>
-                  Re-sync
-                </button>
               </div>
               {summaryData ? (
                 <TelemetryPanel summary={summaryData} theme={theme} units={units} />
@@ -496,7 +498,7 @@ export default function Dashboard() {
                 <h2>Equipment Lifecycle &amp; Telemetry</h2>
                 <div className="hint" style={{ marginTop: 6 }}>
                   No gear retrieved from your Strava profile yet — add shoes or a bike to your
-                  activities in Strava, then hit Re-sync above to start tracking wear.
+                  activities in Strava, then use Re-sync from Strava in the menu to start tracking wear.
                 </div>
               </div>
             )}

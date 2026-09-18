@@ -15,7 +15,7 @@ const TIER_LABELS = { free: "Free", plus: "Plus", pro: "Pro" };
 // name (with their membership tier) opens a dropdown with the rest of
 // the account-level navigation, instead of spreading those links flat
 // across the header.
-export default function UserMenu({ name, tier, isTrial, avatarUrl }) {
+export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, resyncing }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(null);
@@ -64,6 +64,16 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl }) {
     router.push("/");
   }
 
+  // On the dashboard itself, onResync is the page's own import function —
+  // called directly. Anywhere else (account, training plan, race day) it's
+  // not passed, so this hands off to the dashboard to run it there instead.
+  function handleResync() {
+    if (resyncing) return;
+    setOpen(false);
+    if (onResync) onResync();
+    else router.push("/app?resync=1");
+  }
+
   const tierLabel = TIER_LABELS[tier] || TIER_LABELS.free;
   const tierSuffix = isTrial ? " - Trial" : "";
 
@@ -82,6 +92,9 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl }) {
             </div>
           </div>
           <Link href="/account" onClick={() => setOpen(false)}>My account</Link>
+          <div className="user-menu-item" onClick={handleResync} style={resyncing ? { opacity: 0.6, cursor: "default" } : undefined}>
+            {resyncing ? "Re-syncing…" : "Re-sync from Strava"}
+          </div>
           {theme && (
             <div className="user-menu-item" onClick={toggleTheme}>
               <ThemeIcon theme={theme} style={{ marginRight: 8 }} />
