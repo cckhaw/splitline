@@ -415,6 +415,34 @@ input::placeholder { color: var(--ink-dim); }
 
 .insights .load-number { font-family: var(--font-mono); font-size: calc(44px * var(--fs-scale, 1)); font-weight: 600; color: var(--brand); line-height: 1; }
 .insights .load-status { font-size: calc(14px * var(--fs-scale, 1)); color: var(--ink); margin-top: 4px; }
+/* admin */
+.admin-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px; }
+.admin-stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 14px; margin: 16px 0; }
+.admin-stat-tile { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }
+.admin-stat-tile .label { font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); margin-bottom: 6px; }
+.admin-stat-tile .value { font-family: var(--font-mono); font-size: calc(28px * var(--fs-scale, 1)); font-weight: 600; color: var(--ink); }
+
+.admin-bar-list { display: flex; flex-direction: column; gap: 10px; margin-top: 10px; }
+.admin-bar-row { display: grid; grid-template-columns: 230px 1fr 44px; align-items: center; gap: 10px; font-size: calc(13px * var(--fs-scale, 1)); }
+.admin-bar-row .label { color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-bar-track { background: var(--bg); border-radius: 4px; height: 10px; overflow: hidden; }
+.admin-bar-fill { height: 100%; border-radius: 4px; }
+.admin-bar-row .count { text-align: right; font-family: var(--font-mono); color: var(--ink-dim); }
+
+.admin-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: calc(13px * var(--fs-scale, 1)); }
+.admin-table th {
+  text-align: left; padding: 8px 10px; color: var(--ink-dim); font-weight: 500; border-bottom: 1px solid var(--line);
+  font-size: calc(11.5px * var(--fs-scale, 1)); text-transform: uppercase; letter-spacing: 0.02em;
+}
+.admin-table td { padding: 10px; border-bottom: 1px solid var(--line); color: var(--ink); }
+.admin-table tr:hover td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
+.admin-table a { text-decoration: none; color: var(--brand); }
+.admin-tier-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: calc(11px * var(--fs-scale, 1)); font-weight: 600; text-transform: uppercase; }
+.admin-tier-badge.free { background: color-mix(in srgb, var(--ink-dim) 18%, transparent); color: var(--ink-dim); }
+.admin-tier-badge.plus { background: color-mix(in srgb, var(--brand2) 18%, transparent); color: var(--brand2); }
+.admin-tier-badge.pro { background: color-mix(in srgb, var(--brand) 18%, transparent); color: var(--brand); }
+.admin-back-link { display: inline-block; margin-bottom: 14px; font-size: calc(13px * var(--fs-scale, 1)); }
+
 .guide-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; margin-top: 16px; }
 @media (max-width: 720px) { .guide-grid { grid-template-columns: 1fr; } }
 .guide-card { background: var(--bg); border: 1px solid var(--line); border-radius: var(--radius); padding: 16px; }

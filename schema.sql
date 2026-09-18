@@ -168,3 +168,21 @@ CREATE TABLE IF NOT EXISTS gear (
   PRIMARY KEY (user_id, id)
 );
 ALTER TABLE gear ADD COLUMN IF NOT EXISTS retired BOOLEAN NOT NULL DEFAULT false;
+
+-- Every trackable user action, for the admin module's per-user usage
+-- analysis (re-syncs, AI refreshes, plan generations, exports) and
+-- site-wide device/browser split. browser/device_type are derived from
+-- the request's User-Agent header at log time (see lib/userAgent.js) —
+-- stored rather than re-parsed on read so admin queries stay cheap.
+CREATE TABLE IF NOT EXISTS usage_events (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  event_type TEXT NOT NULL,     -- 'login' | 'strava_sync' | 'ai_refresh_biomechanical' |
+                                 -- 'training_plan_generate' | 'race_day_plan_generate' | 'export_share'
+  metadata JSONB,                -- event-specific extra detail, e.g. {"trigger":"resync"} or {"source":"share_pdf","panel":"training_plan"}
+  browser TEXT,                  -- 'Chrome' | 'Safari' | 'Firefox' | 'Edge' | 'Samsung Internet' | 'Opera' | 'Other' | null
+  device_type TEXT,              -- 'mobile' | 'tablet' | 'desktop' | null
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events (user_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_usage_events_type ON usage_events (event_type, created_at DESC);

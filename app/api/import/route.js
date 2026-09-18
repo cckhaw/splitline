@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
 import { getStravaConnection, updateStravaTokens, upsertActivity, countActivitiesForUser, upsertGear, setStravaAvatar } from "@/lib/db";
 import { getValidAccessToken, listActivities, getActivity, getStreams, getGear, getAthlete } from "@/lib/strava";
+import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Pro plan+; Hobby caps this lower regardless — see README.
@@ -36,6 +37,12 @@ export async function POST(request) {
     // per import/re-sync (page 1 only), before the early-return below, so
     // it still refreshes even when all 30 activities are already imported.
     if (page === 1) {
+      // "resync" vs "initial import" is inferred from whether the user
+      // already had any activities before this run touches anything —
+      // simpler and more reliable than trusting a client-supplied flag.
+      const hadActivitiesBefore = (await countActivitiesForUser(session.userId)) > 0;
+      trackEvent(request, session.userId, "strava_sync", { trigger: hadActivitiesBefore ? "resync" : "initial" });
+
       try {
         const athlete = await getAthlete(accessToken);
         // athlete.profile is Strava's full-size profile photo URL (a plain

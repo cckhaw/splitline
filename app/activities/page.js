@@ -75,11 +75,11 @@ export default function ActivitiesPage() {
     return `splitline-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}.png`;
   }
 
-  async function fetchCardBlob(activityId) {
+  async function fetchCardBlob(activityId, intent) {
     const res = await fetch("/api/overlay", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ activity_id: activityId, theme, units, format: "png" }),
+      body: JSON.stringify({ activity_id: activityId, theme, units, format: "png", intent }),
     });
     if (!res.ok) return null;
     return res.blob();
@@ -104,7 +104,7 @@ export default function ActivitiesPage() {
   async function saveCard(activityId, name) {
     setSavingId(activityId);
     try {
-      const blob = await fetchCardBlob(activityId);
+      const blob = await fetchCardBlob(activityId, "save");
       if (!blob) return;
       downloadBlob(blob, fileNameFor(name));
     } finally {
@@ -122,7 +122,7 @@ export default function ActivitiesPage() {
   async function postToStrava(activityId, name) {
     setPostingId(activityId);
     try {
-      const blob = await fetchCardBlob(activityId);
+      const blob = await fetchCardBlob(activityId, "post_strava");
       if (!blob) return;
       const filename = fileNameFor(name);
       const file = new File([blob], filename, { type: "image/png" });

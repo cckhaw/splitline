@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/authGuard";
 import { getActivityById } from "@/lib/db";
 import { buildSvg } from "@/lib/svg";
 import { svgToPng } from "@/lib/renderPng";
+import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
 
@@ -10,7 +11,7 @@ export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const { activity_id, theme = "ink", units = "metric", hero_metric, trace_metric = "elevation", format = "png" } = await request.json();
+  const { activity_id, theme = "ink", units = "metric", hero_metric, trace_metric = "elevation", format = "png", intent = "save" } = await request.json();
 
   const a = await getActivityById(session.userId, activity_id);
   if (!a) return NextResponse.json({ error: "not_found" }, { status: 404 });
@@ -39,6 +40,12 @@ export async function POST(request) {
   if (format === "svg") {
     return new NextResponse(svg, { headers: { "content-type": "image/svg+xml", "cache-control": "no-store" } });
   }
+  // Only real png downloads count as an export — the gallery's own
+  // svg-preview renders (format=svg, above) aren't a user-initiated save.
+  trackEvent(request, session.userId, "export_share", {
+    source: intent === "post_strava" ? "post_strava" : "save_image",
+    panel: "activity_overlay",
+  });
   const png = await svgToPng(svg);
   return new NextResponse(png, { headers: { "content-type": "image/png", "cache-control": "no-store" } });
 }

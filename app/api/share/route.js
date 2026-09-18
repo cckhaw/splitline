@@ -7,6 +7,7 @@ import {
   buildTrainingPlanShareContent,
   buildRaceDayShareContent,
 } from "@/lib/shareContent";
+import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
 
@@ -41,6 +42,8 @@ export async function POST(request) {
   } catch {
     return NextResponse.json({ error: "invalid_payload" }, { status: 400 });
   }
+
+  trackEvent(request, session.userId, "export_share", { source: "share_button", panel: kind, format });
 
   const stem = FILE_STEMS[kind];
   if (format === "png") {
