@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import SiteFooter from "@/components/SiteFooter";
 import { EVENT_TYPES, DISTANCE_OPTIONS, GOAL_TIME_OPTIONS } from "@/lib/eventTypes";
 import { buildProgressChartSvg } from "@/lib/progressChart";
 import { resolveTheme } from "@/lib/theme";
@@ -156,7 +157,7 @@ export default function TrainingPlanPage() {
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>Training plan</h2>
 
@@ -306,6 +307,7 @@ export default function TrainingPlanPage() {
           </div>
         </>
       )}
+      <SiteFooter />
     </div>
   );
 }

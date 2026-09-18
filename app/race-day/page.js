@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import SiteFooter from "@/components/SiteFooter";
 
 // A response can come back with an empty or non-JSON body — a platform
 // timeout truncating a slow AI call, a proxy error page, a crashed
@@ -143,7 +144,7 @@ export default function RaceDayPage() {
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>Race-day plan</h2>
 
@@ -256,6 +257,7 @@ export default function RaceDayPage() {
           )}
         </>
       )}
+      <SiteFooter />
     </div>
   );
 }

@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
+import SiteFooter from "@/components/SiteFooter";
 
 const MIN_SIGNUP_AGE = 13;
 
@@ -119,7 +120,10 @@ export default function SignupPage() {
     return (
       <div className="shell narrow">
         <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
-          <div className="wordmark">SPLIT<span>LINE</span></div>
+          <div className="wordmark">
+            <img src="/logo.png" alt="" width={26} height={26} />
+            <span className="split">SPLIT</span><span className="line">LINE</span>
+          </div>
           <ThemeToggle />
         </div>
         <div className="panel">
@@ -147,6 +151,7 @@ export default function SignupPage() {
             Didn&rsquo;t get it? <a onClick={handleResend} style={{ cursor: "pointer" }}>Resend code</a>
           </div>
         </div>
+        <SiteFooter />
       </div>
     );
   }
@@ -154,7 +159,10 @@ export default function SignupPage() {
   return (
     <div className="shell narrow">
       <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
-        <div className="wordmark">SPLIT<span>LINE</span></div>
+        <div className="wordmark">
+          <img src="/logo.png" alt="" width={26} height={26} />
+          <span className="split">SPLIT</span><span className="line">LINE</span>
+        </div>
         <ThemeToggle />
       </div>
       <div className="panel">
@@ -189,6 +197,7 @@ export default function SignupPage() {
           Already have an account? <Link href="/login">Log in</Link>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

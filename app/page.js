@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
+import SiteFooter from "@/components/SiteFooter";
 import { PLANS, formatUsd } from "@/lib/pricing";
 import { TIERS, BETA_PRO_TRIAL_DAYS } from "@/lib/membership";
 
@@ -21,13 +22,13 @@ export default function Home() {
   return (
     <div className="shell">
       <header className="top">
-        <div className="wordmark">SPLIT<span>LINE</span></div>
+        <div className="wordmark">
+          <img src="/logo.png" alt="" width={26} height={26} />
+          <span className="split">SPLIT</span><span className="line">LINE</span>
+        </div>
         <nav className="navlinks">
           <ThemeToggle />
           <Link href="/login">Log in</Link>
-          <Link href="/signup">
-            <button className="primary navcta">Sign up free</button>
-          </Link>
         </nav>
       </header>
 
@@ -112,10 +113,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="foot">
-        <span>Splitline</span>
-        <span>Built on Strava&rsquo;s API. Not affiliated with or endorsed by Strava.</span>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }

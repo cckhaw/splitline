@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
+import SiteFooter from "@/components/SiteFooter";
 
 const ERROR_MESSAGES = {
   google_not_configured: "Google sign-in isn't set up on this deployment yet.",
@@ -64,7 +65,10 @@ export default function LoginPage() {
   return (
     <div className="shell narrow">
       <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
-        <div className="wordmark">SPLIT<span>LINE</span></div>
+        <div className="wordmark">
+          <img src="/logo.png" alt="" width={26} height={26} />
+          <span className="split">SPLIT</span><span className="line">LINE</span>
+        </div>
         <ThemeToggle />
       </div>
       <div className="panel">
@@ -93,6 +97,7 @@ export default function LoginPage() {
           New here? <Link href="/signup">Sign up free</Link>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

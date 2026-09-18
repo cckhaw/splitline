@@ -3,6 +3,8 @@
 import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import TelemetryPanel from "@/components/TelemetryPanel";
+import SiteFooter from "@/components/SiteFooter";
 
 const ERROR_MESSAGES = {
   state_mismatch: "That connection attempt looked tampered with — try connecting again.",
@@ -25,7 +27,7 @@ export default function Dashboard() {
   const [importProgress, setImportProgress] = useState(0);
 
   const [activities, setActivities] = useState([]);
-  const [summaryPreview, setSummaryPreview] = useState(null);
+  const [summaryData, setSummaryData] = useState(null);
   const [summarySaving, setSummarySaving] = useState(false);
   const [insights, setInsights] = useState(null);
   const [refreshingAi, setRefreshingAi] = useState(false);
@@ -54,8 +56,14 @@ export default function Dashboard() {
       setStatus(ERROR_MESSAGES[err] || `Couldn't connect to Strava (${err}).`);
       window.history.replaceState({}, "", "/app");
     }
+    // "Re-sync from Strava" in the hamburger menu links here from other
+    // pages (it can only run the import directly when already on the
+    // dashboard) — this picks that request back up once loaded.
+    const wantsResync = params.get("resync") === "1";
+    if (wantsResync) window.history.replaceState({}, "", "/app");
     loadMe().then((data) => {
-      if (data?.stravaConnected && data.activityCount > 0) loadActivitiesAndInsights();
+      if (data?.stravaConnected && wantsResync) runImport();
+      else if (data?.stravaConnected && data.activityCount > 0) loadActivitiesAndInsights();
     });
   }, [loadMe]);
 
@@ -123,7 +131,7 @@ export default function Dashboard() {
     setActivities(actData.activities || []);
     setInsights(insData);
     setEquipment(equipRes.ok ? await equipRes.json() : null);
-    if ((actData.activities || []).length > 0) await loadSummaryPreview(theme, units);
+    if ((actData.activities || []).length > 0) await loadSummaryData();
   }
 
   async function refreshAiInsights() {
@@ -137,36 +145,36 @@ export default function Dashboard() {
     }
   }
 
-  async function loadSummaryPreview(themeArg, unitsArg) {
+  async function loadSummaryData() {
     const res = await fetch("/api/telemetry-summary", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ theme: themeArg, units: unitsArg, format: "svg" }),
+      body: JSON.stringify({ format: "json" }),
     });
-    if (!res.ok) {
-      setSummaryPreview(null);
-      return;
-    }
-    const svgText = await res.text();
-    setSummaryPreview(URL.createObjectURL(new Blob([svgText], { type: "image/svg+xml" })));
+    setSummaryData(res.ok ? (await res.json()).summary : null);
   }
 
+  // Theme/units only change how the already-fetched summary is *displayed*
+  // (components/TelemetryPanel.js applies both client-side), so switching
+  // either is an instant re-render — no round trip needed.
   function changeTheme(next) {
     setTheme(next);
-    loadSummaryPreview(next, units);
   }
   function changeUnits(next) {
     setUnits(next);
-    loadSummaryPreview(theme, next);
   }
 
   async function saveSummaryImage() {
     setSummarySaving(true);
     try {
+      // Mobile and desktop browsers get differently-laid-out export images
+      // (lib/telemetrySummarySvg.js's two variants) so the saved picture
+      // reads as well as the live panel does on whichever device saved it.
+      const variant = window.matchMedia("(max-width: 700px)").matches ? "mobile" : "desktop";
       const res = await fetch("/api/telemetry-summary", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ theme, units, format: "png" }),
+        body: JSON.stringify({ theme, units, format: "png", variant }),
       });
       if (!res.ok) return;
       const blob = await res.blob();
@@ -186,7 +194,7 @@ export default function Dashboard() {
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} onResync={runImport} resyncing={importing} />
 
       {status && <div className={`status-line${statusWarn ? " warn" : ""}`} style={{ marginBottom: 16 }}>{status}</div>}
 
@@ -387,7 +395,7 @@ export default function Dashboard() {
             )}
 
             <div className="panel">
-              <h2 style={{ margin: 0 }}>Telemetry overlays</h2>
+              <h2 style={{ margin: 0 }}>Strava Summary</h2>
               <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
                 One infographic for your last {activities.length} activities — total training time across the
                 period, a fatigue read on how recently and how hard you've been training, and an intensity trend
@@ -406,17 +414,13 @@ export default function Dashboard() {
                     {k === "metric" ? "km · kg" : "mi · lb"}
                   </div>
                 ))}
-                <div style={{ flex: 1 }} />
-                <button style={{ width: "auto", padding: "7px 14px" }} onClick={runImport} disabled={importing}>
-                  Re-sync
-                </button>
               </div>
-              {summaryPreview ? (
-                <img src={summaryPreview} alt="Training summary infographic" style={{ width: "100%", height: "auto", display: "block", borderRadius: "var(--radius)" }} />
+              {summaryData ? (
+                <TelemetryPanel summary={summaryData} theme={theme} units={units} />
               ) : (
-                <div className="status-line">Rendering…</div>
+                <div className="status-line">Loading…</div>
               )}
-              <button style={{ width: "auto", padding: "7px 14px", marginTop: 12 }} onClick={saveSummaryImage} disabled={summarySaving || !summaryPreview}>
+              <button style={{ width: "auto", padding: "7px 14px", marginTop: 12 }} onClick={saveSummaryImage} disabled={summarySaving || !summaryData}>
                 {summarySaving ? "Saving…" : "Save as image"}
               </button>
             </div>
@@ -495,13 +499,14 @@ export default function Dashboard() {
                 <h2>Equipment Lifecycle &amp; Telemetry</h2>
                 <div className="hint" style={{ marginTop: 6 }}>
                   No gear retrieved from your Strava profile yet — add shoes or a bike to your
-                  activities in Strava, then hit Re-sync above to start tracking wear.
+                  activities in Strava, then use Re-sync from Strava in the menu to start tracking wear.
                 </div>
               </div>
             )}
           </div>
         </div>
       )}
+      <SiteFooter />
     </div>
   );
 }

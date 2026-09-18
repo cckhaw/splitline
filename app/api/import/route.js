@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { getStravaConnection, updateStravaTokens, upsertActivity, countActivitiesForUser, upsertGear } from "@/lib/db";
+import { getStravaConnection, updateStravaTokens, upsertActivity, countActivitiesForUser, upsertGear, setStravaAvatar } from "@/lib/db";
 import { getValidAccessToken, listActivities, getActivity, getStreams, getGear, getAthlete } from "@/lib/strava";
 
 export const runtime = "nodejs";
@@ -38,6 +38,12 @@ export async function POST(request) {
     if (page === 1) {
       try {
         const athlete = await getAthlete(accessToken);
+        // athlete.profile is Strava's full-size profile photo URL (a plain
+        // hotlinkable CDN URL, no auth needed to display it) — refreshed on
+        // every sync unless the athlete has since uploaded their own crop.
+        if (athlete.profile && !/avatar\/athlete/.test(athlete.profile)) {
+          await setStravaAvatar(session.userId, athlete.profile);
+        }
         const gearIds = [...(athlete.shoes || []), ...(athlete.bikes || [])].map((g) => g.id);
         for (const gearId of gearIds) {
           try {

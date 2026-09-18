@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import ThemeIcon from "@/components/ThemeIcon";
 
 export const THEME_STORAGE_KEY = "splitline_theme";
 
@@ -28,8 +29,14 @@ export default function ThemeToggle() {
   if (!theme) return null;
 
   return (
-    <button type="button" className="theme-toggle" onClick={toggle} style={{ width: "auto", padding: "7px 14px" }}>
-      {theme === "light" ? "Dark mode" : "Light mode"}
+    <button
+      type="button"
+      className="theme-icon-toggle"
+      onClick={toggle}
+      aria-label={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+      title={theme === "light" ? "Switch to dark mode" : "Switch to light mode"}
+    >
+      <ThemeIcon theme={theme} />
     </button>
   );
 }
