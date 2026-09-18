@@ -20,13 +20,6 @@ export async function GET(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const url = new URL(request.url);
-  const forceRefresh = url.searchParams.get("refresh") === "1";
-  // Logged on the explicit "Refresh AI analysis" click itself, not on the
-  // silent auto-load — this counts user-initiated refresh requests, tier
-  // lock or generation failure notwithstanding.
-  if (forceRefresh) trackEvent(request, session.userId, "ai_refresh_biomechanical");
-
   let activities, user;
   try {
     [activities, user] = await Promise.all([
@@ -63,7 +56,7 @@ export async function GET(request) {
     console.error("Failed to read cached AI insights / usage:", e);
   }
 
-  const wantsGenerate = !cached || forceRefresh || cached.input_hash !== inputHash;
+  const wantsGenerate = !cached || cached.input_hash !== inputHash;
   const eligible = isRefreshEligible(tier, usage?.last_used_at);
 
   if (wantsGenerate && eligible) {
@@ -71,6 +64,11 @@ export async function GET(request) {
       const analysis = await generateHealthAnalysis(summary);
       await saveAiInsights(session.userId, inputHash, analysis);
       await recordAiUsage(session.userId, FEATURE);
+      // Fires whenever a fresh analysis is actually generated. There's no
+      // manual "Refresh" button anymore (see app/app/page.js) — this now
+      // most often happens right after a Strava re-sync brings in new
+      // activities and this panel's input hash changes as a result.
+      trackEvent(request, session.userId, "ai_refresh_biomechanical");
       return NextResponse.json({ ...response, ai: analysis, aiGeneratedAt: new Date().toISOString(), aiCached: false, aiLocked: false });
     } catch (e) {
       console.error("AI health analysis failed:", e);
