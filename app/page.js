@@ -39,12 +39,11 @@ export default function Home() {
 
       <section className="hero-grid">
         <div className="hero">
-          <h1>Your workout already has the story. Splitline just puts it on the card.</h1>
+          <h1>Everything your Strava data can tell you — now it does.</h1>
           <p className="lede">
-            Connect Strava once, pull in your last 30 activities, and get a
-            telemetry overlay for each one — pace, power, heart rate, and the
-            trace itself — styled like a cockpit readout, not a template.
-            Post it straight to your Strava feed.
+            Splitline turns your Strava history into an AI training plan, race-day pacing and fueling
+            strategy, injury-risk and recovery guidance, gear-wear tracking, and cockpit-readout
+            telemetry overlays for your feed.
           </p>
           <Link href="/signup">
             <button className="primary navcta wide">

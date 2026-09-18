@@ -5,7 +5,8 @@ export default function manifest() {
   return {
     name: "Splitline",
     short_name: "Splitline",
-    description: "Turn a Strava activity's own numbers into the overlay you post.",
+    description:
+      "AI training plans, race-day pacing and fueling, injury-risk and recovery guidance, gear-wear tracking, and telemetry overlays — all built from your own Strava data.",
     start_url: "/",
     display: "standalone",
     background_color: "#EAF6FC",

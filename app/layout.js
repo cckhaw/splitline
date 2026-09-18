@@ -1,8 +1,9 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Splitline — telemetry overlays for Strava",
-  description: "Turn a Strava activity's own numbers into the overlay you post.",
+  title: "Splitline — AI Training, Race-Day & Injury Advisor for Strava",
+  description:
+    "Splitline turns your Strava history into an AI training plan, race-day pacing and fueling strategy, injury-risk and recovery guidance, gear-wear tracking, and cockpit-readout telemetry overlays for your feed.",
 };
 
 // Sets the theme attribute and font-size scale before first paint so
