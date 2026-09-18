@@ -200,13 +200,81 @@ input::placeholder { color: var(--ink-dim); }
 .navlinks a { color: var(--ink-dim); text-decoration: none; font-size: calc(14px * var(--fs-scale, 1)); }
 .navcta { width: auto; padding: 9px 18px; }
 .navcta.wide { padding: 13px 30px; font-size: calc(15px * var(--fs-scale, 1)); margin-top: 8px; }
-.hero { padding: 60px 0 40px; max-width: 640px; }
+.hero-grid { display: grid; grid-template-columns: 1fr; gap: 40px; align-items: center; padding: 60px 0 40px; }
+@media (min-width: 900px) { .hero-grid { grid-template-columns: 1.05fr 0.95fr; } }
+.hero { max-width: 640px; }
 .hero h1 { font-size: calc(42px * var(--fs-scale, 1)); line-height: 1.15; font-weight: 700; margin: 0 0 18px; letter-spacing: -0.01em; }
 .lede { font-size: calc(16px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.6; margin: 0 0 28px; max-width: 520px; }
+.hero-visual { display: flex; justify-content: center; }
+@media (max-width: 899px) { .hero-visual { order: -1; } }
+
+/* telemetry card mockup — a static preview of a real exported overlay
+   card (see lib/svg.js), used for the hero visual and the feed mockup.
+   Deliberately fixed dark colors, independent of the site's own light/
+   dark theme: it represents the exported artifact itself, which always
+   renders in one of its own three fixed card themes (ink/paper/signal). */
+.telemetry-card-mock {
+  width: 320px; max-width: 100%; background: #10151f; border-radius: 12px; padding: 24px;
+  color: #ECE7DA; font-family: var(--font-head);
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.08), 0 30px 70px -20px rgba(0,0,0,0.6),
+    0 0 60px -10px color-mix(in srgb, var(--brand-2) 45%, transparent),
+    0 0 40px -15px color-mix(in srgb, var(--brand) 40%, transparent);
+  transform: perspective(1000px) rotateY(-8deg) rotateX(4deg);
+  transition: transform 0.4s ease;
+}
+.telemetry-card-mock:hover { transform: perspective(1000px) rotateY(-4deg) rotateX(2deg) scale(1.02); }
+.tcm-row { display: flex; justify-content: space-between; font-family: var(--font-mono); font-size: 11px; color: #8B93A6; letter-spacing: 0.05em; margin-bottom: 14px; }
+.tcm-hero { font-family: var(--font-mono); font-size: 46px; font-weight: 700; color: var(--brand); line-height: 1; }
+.tcm-unit { font-size: 16px; font-weight: 500; color: #8B93A6; margin-left: 6px; }
+.tcm-label { font-size: 12px; color: #8B93A6; margin: 4px 0 18px; }
+.tcm-trace { width: 100%; height: 50px; display: block; margin-bottom: 18px; filter: drop-shadow(0 0 6px color-mix(in srgb, var(--brand-2) 60%, transparent)); }
+.tcm-stats { display: flex; justify-content: space-between; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 14px; }
+.tcm-stats > div { display: flex; flex-direction: column; gap: 2px; }
+.tcm-stat-label { font-size: 10px; color: #8B93A6; text-transform: uppercase; letter-spacing: 0.05em; }
+.tcm-stat-value { font-family: var(--font-mono); font-size: 15px; font-weight: 600; color: #ECE7DA; }
+.telemetry-card-mock.compact {
+  width: 260px; padding: 16px; transform: none;
+  box-shadow: 0 0 0 1px rgba(255,255,255,0.08), 0 0 40px -12px color-mix(in srgb, var(--brand-2) 40%, transparent);
+}
+.telemetry-card-mock.compact .tcm-hero { font-size: 34px; }
+.telemetry-card-mock.compact .tcm-trace { height: 40px; margin-bottom: 14px; }
+
+/* social-proof feed mockup */
+.feed-proof { display: grid; grid-template-columns: 1fr; gap: 32px; align-items: center; padding: 50px 0; border-top: 1px solid var(--line); margin-top: 10px; }
+@media (min-width: 900px) { .feed-proof { grid-template-columns: 1fr 1fr; } }
+.feed-proof h2 { font-size: calc(26px * var(--fs-scale, 1)); font-weight: 700; color: var(--ink); text-transform: none; letter-spacing: 0; margin: 0 0 12px; }
+.feed-mock { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; max-width: 380px; }
+.feed-mock-head { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; }
+.feed-mock-avatar {
+  width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;
+  background: linear-gradient(135deg, var(--brand-2), var(--brand));
+}
+.feed-mock-name { font-size: calc(13.5px * var(--fs-scale, 1)); font-weight: 600; color: var(--ink); }
+.feed-mock-meta { font-size: calc(11.5px * var(--fs-scale, 1)); color: var(--ink-dim); }
+.feed-mock-title { font-size: calc(14px * var(--fs-scale, 1)); font-weight: 600; color: var(--ink); margin-bottom: 14px; }
+.feed-mock-image { display: flex; justify-content: center; margin-bottom: 14px; }
+.feed-mock-actions { display: flex; gap: 16px; font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 10px; }
+
 .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 20px 0 60px; border-top: 1px solid var(--line); margin-top: 20px; }
 @media (max-width: 860px) { .features { grid-template-columns: 1fr; } .hero h1 { font-size: calc(30px * var(--fs-scale, 1)); } }
 .feature h3 { font-size: calc(16px * var(--fs-scale, 1)); font-weight: 500; margin: 0 0 8px; color: var(--ink); }
 .feature p { font-size: calc(13.5px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.6; margin: 0; }
+.feature-badge {
+  display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
+  padding: 4px 10px; border-radius: 999px; font-family: var(--font-mono);
+  font-size: calc(11px * var(--fs-scale, 1)); font-weight: 600;
+}
+.feature-badge.cyan {
+  color: var(--brand-2); background: color-mix(in srgb, var(--brand-2) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand-2) 40%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--brand-2) 35%, transparent);
+}
+.feature-badge.orange {
+  color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 35%, transparent);
+}
 .foot {
   display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px 20px;
   font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); border-top: 1px solid var(--line);
