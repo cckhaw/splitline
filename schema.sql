@@ -39,12 +39,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg DOUBLE PRECISION;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_source TEXT;
 
--- Six-digit codes emailed for signup verification and email-change
--- confirmation. Codes are stored hashed (sha256), never in plaintext.
+-- Six-digit codes emailed for signup verification, email-change
+-- confirmation, and password-reset verification. Codes are stored
+-- hashed (sha256), never in plaintext.
 CREATE TABLE IF NOT EXISTS verification_codes (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-  purpose TEXT NOT NULL,       -- 'signup_email' | 'change_email'
+  purpose TEXT NOT NULL,       -- 'signup_email' | 'change_email' | 'password_reset'
   code_hash TEXT NOT NULL,
   new_email TEXT,              -- target address for 'change_email'; NULL otherwise
   attempts INTEGER NOT NULL DEFAULT 0,

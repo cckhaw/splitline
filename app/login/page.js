@@ -21,12 +21,17 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
+  const [resetDone, setResetDone] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const err = params.get("error");
     if (err) {
       setError(ERROR_MESSAGES[err] || "Couldn't sign in.");
+      window.history.replaceState({}, "", "/login");
+    }
+    if (params.get("reset") === "1") {
+      setResetDone(true);
       window.history.replaceState({}, "", "/login");
     }
   }, []);
@@ -73,6 +78,7 @@ export default function LoginPage() {
       </div>
       <div className="panel">
         <h2>Log in</h2>
+        {resetDone && <div className="status-line" style={{ marginBottom: 14 }}>Your password has been reset — log in with your new one.</div>}
         <a href="/api/auth/google">
           <button type="button" style={{ marginBottom: 16 }}>Continue with Google</button>
         </a>
@@ -80,7 +86,10 @@ export default function LoginPage() {
         <form onSubmit={handleSubmit}>
           <label>Email</label>
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
-          <label>Password</label>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+            <label>Password</label>
+            <Link href="/forgot-password" style={{ fontSize: "calc(12.5px * var(--fs-scale, 1))" }}>Forgot password?</Link>
+          </div>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
           {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
           {needsVerification && (
