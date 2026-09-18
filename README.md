@@ -81,6 +81,7 @@ deletes everything it made. All five lines should print `✓`.
 | `ANTHROPIC_API_KEY` | from [console.anthropic.com](https://console.anthropic.com) — powers the injury-risk/recovery/nutrition panel and the training plan. Without it, those just show "couldn't generate"; the rest of the app is unaffected. |
 | `STRIPE_SECRET_KEY` | from the Stripe dashboard → Developers → API keys — powers Plus/Pro checkout and the billing portal. Without it, upgrade buttons return a clear "billing not configured" error; Free tier and everything else work fine. |
 | `STRIPE_WEBHOOK_SECRET` | from Stripe dashboard → Developers → Webhooks → your endpoint's "Signing secret", after pointing an endpoint at `/api/stripe/webhook` — see "Stripe billing" below for which events to subscribe it to. |
+| `NEXT_PUBLIC_BETA_PRO_TRIAL_DAYS` | optional — how many days of free Pro tier new signups get (default 90; `0` turns the promo off). Must keep the `NEXT_PUBLIC_` prefix — the home page's beta banner reads it in the browser, and Next only exposes prefixed env vars there, inlined at build time (so a value change needs a redeploy either way). |
 
 ### 4. Push to Git, import into Vercel, deploy
 

@@ -7,18 +7,18 @@ export const metadata = {
 
 // Sets the theme attribute and font-size scale before first paint so
 // neither flashes its default before switching to the stored value.
-// Falls back to dark / 1x when nothing is stored yet or storage is
+// Falls back to light / 1.15x when nothing is stored yet or storage is
 // blocked. The font-size bounds here are duplicated from lib/fontSize.js
 // (a plain <script> can't import a module) — keep the two in sync.
 const THEME_INIT_SCRIPT = `(function(){
   try{
     var t = localStorage.getItem("splitline_theme");
-    if (t !== "light" && t !== "dark") t = "dark";
+    if (t !== "light" && t !== "dark") t = "light";
     document.documentElement.setAttribute("data-theme", t);
-  }catch(e){document.documentElement.setAttribute("data-theme","dark");}
+  }catch(e){document.documentElement.setAttribute("data-theme","light");}
   try{
     var s = parseFloat(localStorage.getItem("splitline_font_scale"));
-    if (!isFinite(s) || s < 0.8 || s > 1.4) s = 1;
+    if (!isFinite(s) || s < 0.8 || s > 1.4) s = 1.15;
     document.documentElement.style.setProperty("--fs-scale", s);
   }catch(e){}
 })();`;

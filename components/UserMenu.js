@@ -21,7 +21,7 @@ export default function UserMenu({ name, tier, isTrial }) {
   const ref = useRef(null);
 
   useEffect(() => {
-    setTheme(document.documentElement.getAttribute("data-theme") || "dark");
+    setTheme(document.documentElement.getAttribute("data-theme") || "light");
     const stored = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--fs-scale"));
     setFontScale(clampFontScale(Number.isFinite(stored) ? stored : FONT_SIZE_DEFAULT));
   }, []);

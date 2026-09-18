@@ -67,6 +67,7 @@ export async function POST(request) {
 
     const summaries = await listActivities(accessToken, PAGE_SIZE, page);
     let imported = 0;
+    const gearFetchedThisRun = new Set(); // dedupe: several activities often share one shoe/bike
 
     for (const s of summaries.slice(0, remaining)) {
       const [detail, streams] = await Promise.all([
@@ -100,6 +101,30 @@ export async function POST(request) {
         gearId: detail.gear_id || null,
       });
       imported++;
+
+      // Supplementary to the athlete-roster fetch above: that call fetches
+      // everything registered on the athlete's profile, but if it fails
+      // (network hiccup, transient Strava error) this still catches
+      // whatever gear these 30 activities actually reference, so a bad
+      // roster fetch degrades to the old per-activity behavior instead of
+      // silently leaving the gear table stale.
+      if (detail.gear_id && !gearFetchedThisRun.has(detail.gear_id)) {
+        gearFetchedThisRun.add(detail.gear_id);
+        try {
+          const gear = await getGear(accessToken, detail.gear_id);
+          await upsertGear(session.userId, {
+            id: gear.id,
+            gearType: String(gear.id).startsWith("b") ? "bike" : "shoe",
+            name: gear.name,
+            brandName: gear.brand_name || null,
+            modelName: gear.model_name || null,
+            distanceKm: gear.distance != null ? gear.distance / 1000 : null,
+            retired: Boolean(gear.retired),
+          });
+        } catch (e) {
+          console.error(`Failed to fetch/cache gear ${detail.gear_id}:`, e);
+        }
+      }
     }
 
     const total = await countActivitiesForUser(session.userId);
