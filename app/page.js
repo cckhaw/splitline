@@ -37,17 +37,6 @@ export default function Home() {
         </nav>
       </header>
 
-      {BETA_PRO_TRIAL_DAYS > 0 && (
-        <div className="beta-banner">
-          <span>
-            <strong>Beta testers get Pro tier free for {BETA_PRO_TRIAL_DAYS} days</strong> — unlimited AI refreshes, on us, while we're building this out.
-          </span>
-          <Link href="/signup">
-            <button className="primary" style={{ width: "auto", padding: "8px 16px" }}>Claim it — sign up</button>
-          </Link>
-        </div>
-      )}
-
       <section className="hero-grid">
         <div className="hero">
           <h1>Your workout already has the story. Splitline just puts it on the card.</h1>
@@ -58,7 +47,11 @@ export default function Home() {
             Post it straight to your Strava feed.
           </p>
           <Link href="/signup">
-            <button className="primary navcta wide">Get started — it&rsquo;s free</button>
+            <button className="primary navcta wide">
+              {BETA_PRO_TRIAL_DAYS > 0
+                ? `Sign Up — Free Pro Tier for ${BETA_PRO_TRIAL_DAYS} days`
+                : "Sign up — it's free"}
+            </button>
           </Link>
         </div>
         <div className="hero-visual">

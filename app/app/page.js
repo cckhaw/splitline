@@ -6,6 +6,7 @@ import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import TelemetryPanel from "@/components/TelemetryPanel";
 import SiteFooter from "@/components/SiteFooter";
+import ShareButton from "@/components/ShareButton";
 
 const ERROR_MESSAGES = {
   state_mismatch: "That connection attempt looked tampered with — try connecting again.",
@@ -285,14 +286,17 @@ export default function Dashboard() {
               <div className="panel">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
                   <h2 style={{ margin: 0 }}>Biomechanical &amp; Overtraining Shield</h2>
-                  <button
-                    style={{ width: "auto", padding: "6px 12px" }}
-                    onClick={refreshAiInsights}
-                    disabled={refreshingAi || insights.aiLocked}
-                    title={insights.aiLocked ? "Refresh limit reached for your tier" : undefined}
-                  >
-                    {refreshingAi ? "Analyzing…" : "Refresh AI analysis"}
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <ShareButton kind="biomechanical" payload={{ athleteName: me.name || me.email, insights }} />
+                    <button
+                      style={{ width: "auto", padding: "6px 12px" }}
+                      onClick={refreshAiInsights}
+                      disabled={refreshingAi || insights.aiLocked}
+                      title={insights.aiLocked ? "Refresh limit reached for your tier" : undefined}
+                    >
+                      {refreshingAi ? "Analyzing…" : "Refresh AI analysis"}
+                    </button>
+                  </div>
                 </div>
                 <div className="hint" style={{ marginTop: 6 }}>
                   Physics-based signals computed from your own activity streams — aerobic decoupling, cadence drift,
