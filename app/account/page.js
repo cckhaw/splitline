@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import Avatar from "@/components/Avatar";
+import AvatarCropper from "@/components/AvatarCropper";
 import { PLANS, formatUsd } from "@/lib/pricing";
 import { TIERS } from "@/lib/membership";
 
@@ -45,6 +47,10 @@ export default function AccountPage() {
   const [weightKg, setWeightKg] = useState("");
   const [weightStatus, setWeightStatus] = useState("");
   const [weightSaving, setWeightSaving] = useState(false);
+
+  const [pendingImage, setPendingImage] = useState(null); // { url, naturalWidth, naturalHeight }
+  const [avatarStatus, setAvatarStatus] = useState("");
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -238,13 +244,70 @@ export default function AccountPage() {
     }
   }
 
+  function onChoosePhoto(e) {
+    const file = e.target.files?.[0];
+    e.target.value = ""; // allow re-choosing the same file later
+    if (!file) return;
+    const url = URL.createObjectURL(file);
+    const img = new Image();
+    img.onload = () => {
+      setPendingImage({ url, naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight });
+    };
+    img.src = url;
+  }
+
+  async function saveAvatar(dataUrl) {
+    setAvatarStatus("");
+    try {
+      const res = await fetch("/api/account/avatar", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ dataUrl }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message);
+      setMe((m) => ({ ...m, avatarUrl: data.avatarUrl }));
+      setPendingImage(null);
+      setAvatarStatus("Photo saved.");
+    } catch (e) {
+      setAvatarStatus(e.message || "Couldn't save that photo.");
+    }
+  }
+
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>My account</h2>
+
+      <div className="panel">
+        <h2>Profile photo</h2>
+        {pendingImage ? (
+          <AvatarCropper
+            imageUrl={pendingImage.url}
+            naturalWidth={pendingImage.naturalWidth}
+            naturalHeight={pendingImage.naturalHeight}
+            onCancel={() => setPendingImage(null)}
+            onSave={saveAvatar}
+          />
+        ) : (
+          <div style={{ display: "flex", alignItems: "center", gap: 16 }}>
+            <Avatar src={me.avatarUrl} name={me.name || me.email} size={64} />
+            <div>
+              <button type="button" style={{ width: "auto", padding: "8px 16px" }} onClick={() => fileInputRef.current?.click()}>
+                Change photo
+              </button>
+              <input ref={fileInputRef} type="file" accept="image/png,image/jpeg,image/webp" onChange={onChoosePhoto} style={{ display: "none" }} />
+              <div className="hint" style={{ marginTop: 6 }}>
+                {me.avatarSource === "strava" ? "Currently your Strava profile photo." : "JPEG, PNG, or WebP."}
+              </div>
+            </div>
+          </div>
+        )}
+        {avatarStatus && <div className="status-line">{avatarStatus}</div>}
+      </div>
 
       <div className="panel">
         <h2>Membership</h2>

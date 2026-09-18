@@ -21,13 +21,13 @@ export default function Home() {
   return (
     <div className="shell">
       <header className="top">
-        <div className="wordmark">SPLIT<span>LINE</span></div>
+        <div className="wordmark">
+          <img src="/logo.png" alt="" width={26} height={26} />
+          <span className="split">SPLIT</span><span className="line">LINE</span>
+        </div>
         <nav className="navlinks">
           <ThemeToggle />
           <Link href="/login">Log in</Link>
-          <Link href="/signup">
-            <button className="primary navcta">Sign up free</button>
-          </Link>
         </nav>
       </header>
 

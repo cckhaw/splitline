@@ -11,7 +11,7 @@ export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const { theme = "ink", units = "metric", format = "png" } = await request.json().catch(() => ({}));
+  const { theme = "ink", units = "metric", format = "png", variant = "desktop" } = await request.json().catch(() => ({}));
 
   try {
     const activities = await getActivitiesForUser(session.userId, 30);
@@ -19,8 +19,12 @@ export async function POST(request) {
       return NextResponse.json({ error: "no_data", message: "Import activities first." }, { status: 400 });
     }
     const summary = buildTelemetrySummary(activities);
-    const svg = buildTelemetrySummarySvg(summary, theme, units);
 
+    if (format === "json") {
+      return NextResponse.json({ summary });
+    }
+
+    const svg = buildTelemetrySummarySvg(summary, theme, units, variant);
     if (format === "svg") {
       return new NextResponse(svg, { headers: { "content-type": "image/svg+xml", "cache-control": "no-store" } });
     }

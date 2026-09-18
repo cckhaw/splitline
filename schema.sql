@@ -31,6 +31,13 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
 -- lib/equipment.js (heavier impact compresses midsole foam faster) — same
 -- reasoning as birth_date above: Strava's API doesn't expose body weight.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS weight_kg DOUBLE PRECISION;
+-- Profile photo: either a hotlinked Strava CDN URL (avatar_source='strava',
+-- refreshed on each import) or a data: URI the athlete cropped and uploaded
+-- themselves (avatar_source='upload') — once they upload their own, imports
+-- stop overwriting it. TEXT has no practical length limit in Postgres, so a
+-- modest cropped JPEG data URI fits fine without needing object storage.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_url TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_source TEXT;
 
 -- Six-digit codes emailed for signup verification and email-change
 -- confirmation. Codes are stored hashed (sha256), never in plaintext.

@@ -143,7 +143,7 @@ export default function RaceDayPage() {
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} />
+      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>Race-day plan</h2>
 
