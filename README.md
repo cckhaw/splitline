@@ -1,102 +1,418 @@
-# Splitline (web) — multi-tenant deploy guide
+# Splitline — a Strava analytics web app
 
-This version supports many users: sign up, log in, connect your own
-Strava account, import your last 30 activities, and get a telemetry
-overlay card for each one. It's also still a hosted MCP connector at
-`/api/mcp`.
+Splitline is a multi-tenant Next.js app: anyone signs up, connects Strava
+(the platform's shared app or their own), imports their last 30
+activities, and gets a dashboard of AI-assisted training analysis built
+from that data — an overtraining/injury-risk read, a periodized training
+plan that tracks itself against actual training, a race-day pacing and
+fueling plan, equipment wear tracking, and shareable exports of all of
+it. Membership tiers gate how often the AI panels refresh; Stripe
+handles billing. A separate, env-var-gated admin module gives the site
+operator usage analytics and manual account controls. It's also still a
+hosted MCP connector at `/api/mcp` for anyone who just wants the overlay
+renderer as a tool in their own agent.
 
-Every piece below was actually run, not just written: signup → session
-→ logout → login, both Strava-connect paths (shared app and "bring your
-own app"), the import route's rejection when Strava isn't connected yet,
-overlay rendering, and the insights endpoint's empty state — all tested
-against a real local Postgres, and `next build` passes clean. The one
-thing that is **not** tested is a real round trip against Strava's
-servers, because that needs credentials only you can create.
+Most of what's below was actually run, not just written — signup through
+Google/password login, Strava-connect (both the shared app and "bring
+your own app"), import, every dashboard panel including the AI ones (via
+seeded fixtures where a live Strava/Anthropic/Stripe credential isn't
+available in this environment), account changes, self-service deletion,
+the admin module end to end, and `next build`, all exercised against a
+real local Postgres and, for the UI, a Playwright-driven browser. The
+two things that are **not** tested against a live third party: a real
+round trip against Strava's own servers (needs credentials only you can
+create) and Stripe billing against an actual account (needs live keys —
+see "Membership tiers and billing" below for exactly what was and wasn't
+verified).
+
+## Contents
+
+- [Architecture, in one paragraph](#architecture-in-one-paragraph)
+- [Feature tour](#feature-tour)
+- [The "bring your own Strava app" option](#the-bring-your-own-strava-app-option--a-deliberate-tradeoff)
+- [Training load and race pace — what these actually are](#training-load-and-race-pace--what-these-actually-are)
+- [Deploy guide](#deploy-guide)
+- [What's still simple on purpose (MVP tradeoffs)](#whats-still-simple-on-purpose-mvp-tradeoffs)
+- [Local development](#local-development)
 
 ## Architecture, in one paragraph
 
-Accounts and sessions are Postgres + a signed cookie (bcrypt for
-passwords, a JWE cookie holding just a user id). Each user's Strava
-tokens live encrypted in the database, not in a cookie — so imports and
-overlays survive across devices and logins. Importing pulls 5
-activities per request (2 Strava API calls each) so no single request
-runs long enough to hit a serverless timeout; the dashboard loops that
-call up to 6 times to cover 30 activities, with a progress bar. Overlay
-images render from the stored data, not a live Strava call, so the
-gallery and the theme/metric toggles are instant.
+Next.js App Router throughout, both the marketing site and the app
+behind login. Accounts and sessions are Postgres + a signed cookie
+(bcrypt for passwords, a JWE cookie holding just a user id) — Google
+login links to the same row by email. Each user's Strava tokens live
+encrypted in the database, not in a cookie, so imports and panels
+survive across devices and logins. Importing pulls 5 activities per
+request (2 Strava API calls each) so no single request runs long enough
+to hit a serverless timeout; the dashboard loops that call up to 6 times
+to cover 30 activities, with a progress bar. The four AI-assisted panels
+(Overtraining Shield, training plan, training-plan deviation detection,
+race-day plan) all call Claude (`lib/anthropic.js`) through the same
+structured-tool-call helper, cache their output per user keyed by a hash
+of their inputs, and are rate-limited by membership tier via a shared
+`ai_usage` table — none of them call the model on every page load. The
+admin module (`/admin`) is a second, completely separate auth system
+(its own session cookie, env-var credentials, no link from the rest of
+the site) layered over the same database for operator-facing analytics
+and account controls.
 
-## Out-of-band steps
+## Feature tour
 
-### 1. Register a Strava API application
+### Accounts, login, and the account page
 
-Same as before: <https://www.strava.com/settings/api> → note the
-**Client ID** and **Client Secret** → set **Authorization Callback
-Domain** to your Vercel domain (bare domain, no scheme/path). This is
-the *platform* app — the one every user gets by default with one click.
+Signup collects full name, email, date of birth, password, and password
+confirmation, then emails a 6-digit code (via Resend — see env vars
+below) that has to be entered before the account can log in. Accounts
+require an age of 13 or older, enforced server-side. "Continue with
+Google" is available on both the signup and login pages; a Google
+sign-in is email-verified automatically and links to an existing
+password-based account with the same email if one exists. Google's
+basic profile scope doesn't include date of birth, so new Google
+sign-ups are sent to the account page to confirm it there instead (also
+enforced at 13+).
 
-### 2. Provision a Postgres database
+**Forgot password** (`/forgot-password`, `/api/auth/forgot-password`,
+`/api/auth/reset-password`) sends the same kind of 6-digit code to the
+account's email; the endpoint always responds success whether or not
+that address has an account, so it can't be used to probe which emails
+are registered. This closed what used to be this app's one real
+account-recovery gap.
 
-Any of these work — the code only uses standard `pg`, nothing
-provider-specific:
+The **My account** page (linked from the dashboard header) lets a
+logged-in user change their name, email (re-verified by code, sent to
+the new address), and password; add or edit their date of birth and body
+weight (both optional, both used to sharpen the AI panels and the gear
+wear estimate — see below, since Strava's API doesn't expose either);
+upload and crop a square profile photo (stored as a data URI in
+Postgres, capped at ~1.5MB decoded — no object storage needed at this
+scale); manage their Stripe subscription; and permanently delete their
+account (see "Privacy, data control, and account deletion" below).
 
-- **Vercel Postgres**: Project → Storage → Create Database → Postgres.
-  Vercel injects a `DATABASE_URL`-compatible connection string
-  automatically when you link it to the project (check the exact env
-  var name it creates — `POSTGRES_URL` in some plans — and either use
-  that name or add a `DATABASE_URL` env var pointing to the same value).
-- **Neon** (neon.tech) or **Supabase**: create a project, copy the
-  connection string (the pooled one, for serverless) into `DATABASE_URL`.
+### Dashboard and Strava sync
 
-Then run the schema once:
+The dashboard's Strava-connect panel defaults to the platform's shared
+app (one click) with an advanced opt-in to paste your own Strava
+Client ID/Secret (see the tradeoff section below). Before anything is
+connected, or before 30 activities are imported, the dashboard shows a
+**Getting Started guide** explaining every capability below in plain
+language, so a new signup knows what connecting Strava actually buys
+them.
 
-```bash
-psql "$DATABASE_URL" -f schema.sql
-```
+Every page behind login shares one header (`components/AppHeader.js`):
+the wordmark, a persistent primary nav (Dashboard, Training) next to it,
+and the athlete's name/tier on the right, opening a dropdown — My
+account, **Re-sync from Strava**, Light/dark mode, font size, Log out
+(`components/UserMenu.js`) — instead of spreading those as flat links.
+On narrow screens the same content collapses into a hamburger menu with
+an accordion for Dashboard/Training (`components/MobileNavMenu.js`).
 
-(Or paste `schema.sql`'s contents into your provider's SQL editor —
-Neon, Supabase, and Vercel Postgres all have one.)
+**Re-sync from Strava** is the one action that refreshes everything:
+it re-imports up to 30 activities, then re-fetches the Overtraining
+Shield panel, the Strava Summary infographic, and — if there's a saved
+training plan — checks it for deviation (see below). There's no
+separate manual "Refresh" button on any of those three; a re-sync is
+what changes the underlying data each of them is computed from, which
+is what actually triggers a fresh read.
 
-Sanity-check the connection and the encryption round-trip before
-deploying:
+Dashboard layout, top to bottom in the main column: Training load (race
+pace prediction included), Overtraining Shield, then Strava Summary. A
+sticky right-hand sidebar holds Equipment Lifecycle & Telemetry. All of
+it only renders once there's data to compute from.
 
-```bash
-DATABASE_URL="..." ENCRYPTION_KEY="..." node scripts/smoke-test-db.mjs
-```
+### Overtraining Shield
 
-It creates one throwaway user, verifies things decrypt correctly, and
-deletes everything it made. All five lines should print `✓`.
+A **physics-model + LLM** hybrid, not an LLM guessing from raw numbers:
 
-### 3. Set environment variables in Vercel
+- **Physics model** (`lib/biomechanics.js`, deterministic, no API
+  calls): computes **aerobic decoupling** (a Pw:HR/Pa:HR efficiency
+  ratio compared between the first and second half of each sustained
+  effort) and **cadence drift** (stride/pedal rate falling late in an
+  effort), aggregated across rolling 7/30/60/90-day windows. Both
+  numbers are shown regardless of whether the AI call below succeeds,
+  fails, or is rate-limited — they cost nothing and need no LLM. This
+  needs `time`, `heartrate`, `velocity_smooth`/`watts`, and `cadence`
+  streams from Strava, stored (trimmed) in `activities.trace`;
+  activities imported before this feature shipped need a re-sync to get
+  them. The **acute:chronic workload ratio** (ACWR, from the
+  training-load panel) rounds out the physics layer.
+- **LLM layer** (`lib/anthropic.js`, requires `ANTHROPIC_API_KEY`):
+  given the athlete's aggregated activity summary plus those
+  deterministic numbers, returns a structured risk level/score,
+  specific risk factors, a recovery and nutrition plan, and an optional
+  `training_adjustment` — populated only when the data actually signals
+  a problem, and shown as guidance with a link to the Training Plan page
+  rather than rewriting the saved plan automatically.
 
-| Name | Value |
-|---|---|
-| `STRAVA_CLIENT_ID` | from step 1 |
-| `STRAVA_CLIENT_SECRET` | from step 1 |
-| `SESSION_SECRET` | random 32+ chars — `openssl rand -base64 32` |
-| `ENCRYPTION_KEY` | random 32+ chars — a **different** value than `SESSION_SECRET` |
-| `DATABASE_URL` | from step 2 |
-| `RESEND_API_KEY` | from [resend.com](https://resend.com) — sends the signup/email-change verification codes. Without it, codes are just logged to the server console (fine for local dev, not for production). |
-| `EMAIL_FROM` | optional — the From address for those emails, e.g. `Splitline <noreply@yourdomain.com>` (must be a domain verified in Resend) |
-| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional — from [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) (OAuth client ID, type "Web application", authorized redirect URI `https://your-domain/api/auth/google/callback`). Without these, the "Continue with Google" buttons redirect to an error instead of Google. |
-| `ANTHROPIC_API_KEY` | from [console.anthropic.com](https://console.anthropic.com) — powers the injury-risk/recovery/nutrition panel and the training plan. Without it, those just show "couldn't generate"; the rest of the app is unaffected. |
-| `STRIPE_SECRET_KEY` | from the Stripe dashboard → Developers → API keys — powers Plus/Pro checkout and the billing portal. Without it, upgrade buttons return a clear "billing not configured" error; Free tier and everything else work fine. |
-| `STRIPE_WEBHOOK_SECRET` | from Stripe dashboard → Developers → Webhooks → your endpoint's "Signing secret", after pointing an endpoint at `/api/stripe/webhook` — see "Stripe billing" below for which events to subscribe it to. |
-| `NEXT_PUBLIC_BETA_PRO_TRIAL_DAYS` | optional — how many days of free Pro tier new signups get (default 90; `0` turns the promo off). Must keep the `NEXT_PUBLIC_` prefix — the home page's beta banner reads it in the browser, and Next only exposes prefixed env vars there, inlined at build time (so a value change needs a redeploy either way). |
-| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | credentials for `/admin` — a separate module for the site operator only, not a user account and not linked from anywhere in the normal app. Without both set, `/admin/login` returns "not configured" and nobody can sign in. |
+**Age does not actually come from Strava** — its public API never
+returns date of birth, for any account. The account page's optional
+date-of-birth field is the only source; without it the panel says so
+and reasons from training patterns alone.
+
+Results are cached (`ai_insights` table) and only regenerated when the
+underlying activity summary actually changes, subject to the
+membership tier's refresh cadence. There's no manual refresh button; a
+Strava re-sync is what changes the summary and triggers a fresh read.
+
+### Strava Summary
+
+One infographic (`lib/telemetrySummary.js` aggregates,
+`lib/telemetrySummarySvg.js` draws, `/api/telemetry-summary` serves it as
+SVG for the live preview or PNG for "Save as image") summarizing the
+whole imported period, rather than one card per activity:
+
+- **Total training time**, the date range, and the acute:chronic load
+  figure.
+- **A fatigue gauge** (`lib/fatigue.js`) — a semi-circle meter blending
+  hours since the last activity (scaled by how hard that effort was)
+  with a bump when ACWR is already elevated. A duration/intensity/
+  recency heuristic, not a physiological measurement.
+- **A training-intensity trend** across the period, using the same
+  per-activity load heuristic (`estimateLoad`) the training-load panel
+  uses so the two can't tell visually different stories.
+- **Stat tiles** for whichever of avg heart rate / avg power / avg pace
+  / avg recorded device temperature the imported activities actually
+  have. Weather and humidity are **not** shown — no weather API key
+  exists in this environment and Strava has no humidity field at all;
+  the one real signal is Strava's occasional device-recorded
+  `average_temp`.
+
+A theme toggle (Ink/Paper/Signal) and a units toggle (metric/imperial)
+apply instantly, client-side, since the whole summary is already fetched
+as data.
+
+### Last 30 Activities
+
+A separate page (`/activities`) with the original per-activity telemetry
+overlay gallery — one Strava-style post-workout card per imported
+activity (`lib/svg.js`, `/api/overlay`), each with its own theme/units
+controls. Each card has a **"Post to my Strava feed"** button that
+renders the card as a PNG and hands it to the OS-level Web Share API
+(`navigator.share`) — on a device with the Strava app installed, Strava
+shows up as a share target there; Splitline itself never posts to
+Strava's API on a user's behalf. Where Web Share isn't available, the
+button falls back to a plain "Save as image" download with a hint to
+share it manually.
+
+### Equipment Lifecycle & Telemetry
+
+A sticky sidebar estimating wear on the athlete's registered Strava gear
+(shoes and bikes) — **entirely deterministic, no LLM call, no membership
+budget spent**:
+
+- `/api/import` fetches the athlete's **complete gear roster** (every
+  piece ever registered, not just what's tagged on the last 30
+  activities) once per sync, caching detail in a `gear` table. Retired
+  gear is fetched (so its status stays known) but filtered from the
+  display.
+- `lib/equipment.js` estimates a shoe's midsole lifespan at 700km,
+  scaled down for body weight above a 70kg reference (self-reported,
+  optional), and a bike's chain-wear mileage at a flat 3000km. 85%+ is
+  "nearing replacement", 100%+ is "replace soon"; the list sorts by
+  mileage. Shoes and bikes have their own tabs.
+- Flagged gear gets a **"Shop replacement options"** link — a plain
+  Google Shopping search built from brand/model, opened in a new tab.
+  No affiliate account, no automated purchase.
+
+### Training plan for an upcoming event
+
+The **Training plan** page lets an athlete set one upcoming event — a
+running race, duathlon, or triathlon, with a distance and goal-time band
+scoped to that event type (`lib/eventTypes.js`). `/api/training-plan`
+sends the aggregated activity summary plus the event details to Claude
+(`generateTrainingPlan`), which returns a periodized plan:
+
+- **3-8 phases** (e.g. Base/Build/Peak/Taper) spanning the full time to
+  the event, each with its focus, weekly volume guidance, a weekly
+  time-commitment estimate, key workouts, and a `relative_load` value
+  (0-100) consistent phase to phase.
+- A **training-progress chart** (`lib/progressChart.js`) plotting
+  `relative_load` across phases, colored from the current theme.
+- Detailed recovery guidelines, a nutrition plan, pre-race preparation,
+  and a race-day strategy.
+
+The plan is cached (`training_plans` table) and only regenerated when
+the goal or the activity data changes, or via "Refresh plan". Setting a
+new event clears the cached plan (but not the tier's refresh clock —
+see "Membership tiers" below).
+
+### Comparing actual training against the plan
+
+Every re-sync also checks whether actual training since the current plan
+was generated has drifted from what the plan called for.
+`lib/trainingPlanDeviation.js` buckets activities imported since the
+plan's `generated_at` into calendar weeks, and
+`/api/training-plan/deviation` hands those — plus the plan's own phases
+(guidance text, not rigid per-week numbers) and the athlete's
+training-load/biomechanics signals — to a dedicated Claude call,
+`generateTrainingPlanDeviation`. Since the plan itself is guidance
+ranges rather than fixed numeric targets, there's no strict formula for
+"10% off plan": the model makes that judgment call directly, the same
+way it judges risk level elsewhere. It returns which of distance, pace,
+power, heart rate, or fatigue look off by roughly 10% or more, a
+week-by-week status ("on track"/"missed"/"exceeded"/"insufficient data")
+matched to the plan's phase names, and a likelihood assessment of
+whether the drift threatens the event goal.
+
+A significant deviation surfaces as an alert panel at the top of the
+dashboard with three choices: **regenerate** the plan from scratch,
+**adjust** its upcoming phases around the deviation
+(`generateAdjustedTrainingPlan`, same output shape as a fresh plan), or
+**continue** as-is. Continuing marks the deviation `acknowledged`
+(`training_plan_deviations` table) without touching the plan, and the
+Training Plan page then annotates each affected phase with the specific
+weeks that were off and by how much, plus the goal-impact analysis. This
+check shares the training-plan feature's own tier-based rate limit
+rather than getting one of its own, and silently skips (no locked-state
+UI) when the tier isn't eligible, since it's a background check, not a
+user-clicked action. A new plan — regenerated, adjusted, or from a
+changed goal — always clears any prior deviation record.
+
+### Race-day plan
+
+Under **Training → Race-day plan**, a page that turns the saved event
+plus race-day conditions entered by hand into an AI pacing and fueling
+plan (`generateRaceDayPlan`): overall pacing strategy, target pace per
+segment, timed fueling/hydration, heat/altitude adjustments, a pre-race
+checklist, and contingencies. Cached and tier-gated exactly like the
+training plan (`race_day_plans` table, `ai_usage` feature `race_day`).
+
+`lib/raceDay.js` derives a grade-adjusted pace factor from the athlete's
+own flat-vs-hilly run history when there's enough of it, falling back to
+a documented ~3%-per-1%-grade heuristic otherwise. Three things from
+common "race day" feature requests are **not** built, and don't have a
+reasonable path inside a web dashboard: GPX course upload (course
+elevation gain is a plain number the athlete enters), a live weather
+pull (no weather API key in this environment; temperature/humidity are
+entered by hand), and real-time audio cues during the actual race (needs
+a native/mobile companion app; the plan instead renders on-page and
+downloads as a text pace/fueling sheet).
+
+### Sharing and exporting panels
+
+The Overtraining Shield panel, the training plan, and the race-day plan
+each have a **Share** button (`components/ShareButton.js`) that exports
+the panel as a professionally formatted, Splitline-branded **PDF or
+PNG** with a QR code back to the site — `lib/shareContent.js` turns each
+panel's already-fetched data into a shared content model,
+`lib/shareCard.js` renders it (SVG for PNG, `pdf-lib` for PDF),
+`/api/share` serves either format. Every export is tracked
+(`export_share` usage event) for the admin module's analytics.
+
+### Appearance and accessibility
+
+A theme toggle (light/dark) is on every page — a standalone button on
+the marketing/auth/account pages, a menu item in the dashboard's user
+menu. Both write `data-theme` on `<html>` and persist to
+`localStorage`, applied before first paint by an inline script in
+`app/layout.js` to avoid a flash of the wrong theme. Light mode reuses
+the same warm-paper palette as the "paper" overlay-card theme.
+
+A +/-/reset **font size** control lives in the same user menu, writing a
+`--fs-scale` CSS custom property that every `font-size` in `globals.css`
+is expressed as a multiple of — same before-first-paint treatment, same
+per-browser persistence.
+
+### Membership tiers and billing
+
+Every account starts on **Free**. The three tiers (`lib/membership.js`)
+don't gate feature *access* — they gate how often the AI panels
+(Overtraining Shield, training plan, race-day plan, and the
+training-plan deviation check, which shares the training-plan budget)
+are allowed to actually call Claude, since that's the real cost driver:
+
+| Tier | Price | AI refresh cadence |
+|---|---|---|
+| Free | $0 | once every 90 days |
+| Plus | $1.99/mo or $19.99/yr | once every 30 days |
+| Pro | $2.99/mo or $29.99/yr | unlimited |
+
+Enforced server-side (`isRefreshEligible`/`nextEligibleDate`), backed by
+an `ai_usage` table recording the last time each feature *actually
+generated*, independent of what's cached — changing a training-plan
+goal doesn't reset this clock, or a free-tier user could bypass the
+90-day limit by re-entering their event. `resolveEffectiveTier()` is the
+only place a stored tier's expiry actually gets resolved (on every
+read) — there's no cron job downgrading lapsed accounts.
+
+New signups (password or Google) get **Pro tier free for
+`NEXT_PUBLIC_BETA_PRO_TRIAL_DAYS` days** (default 90) via the same
+`tier`/`tier_expires_at` mechanism as a paid subscription — no separate
+"trial" concept. Set it to `0` to turn the promo off for new signups;
+the home page's pricing section reads the same constant.
+
+**Stripe billing**: upgrading (`/api/billing/checkout`) creates a
+Checkout Session with the price built inline via `price_data`
+(`lib/pricing.js` is the only file to edit to change pricing) rather
+than a pre-created Stripe Price object. A "Manage billing" link opens
+Stripe's hosted Customer Portal for payment methods, invoices, and
+cancellation — not plan switching, which goes back through a fresh
+Checkout session instead. `/api/stripe/webhook` handles
+`checkout.session.completed`, `invoice.payment_succeeded`, and
+`customer.subscription.deleted`. **This has not been tested against a
+real Stripe account** — no live key exists in this environment; the
+integration is written against the installed SDK's actual types, but
+run a real test-mode checkout end to end before trusting it with real
+cards.
 
 ### Admin module
 
-`/admin` is a small operator-only dashboard: total users and their membership tier, and a per-user usage breakdown (Strava re-syncs, AI Biomechanical Shield refreshes, training-plan and race-day-plan generations, PDF/PNG/Strava-feed exports) plus a site-wide device/browser split. It signs in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` only — there's no link to it from the rest of the site, it's excluded via `robots.txt`, and its session is a completely separate cookie from user logins, so no user account (however it was created) can ever reach it.
+`/admin` is a small operator-only dashboard — env-var credentials
+(`ADMIN_USERNAME`/`ADMIN_PASSWORD`), a completely separate session
+cookie from user logins (no user account, however created, can ever
+reach it), no link to it from the rest of the site, and excluded via
+`robots.txt` as a second layer on top of the auth itself.
 
-### 4. Push to Git, import into Vercel, deploy
+- **Overview** (`/admin`): total users and their membership tier
+  breakdown, site-wide feature-usage totals (re-syncs, AI refreshes,
+  plan generations, exports), a device/browser split, and a table of
+  every user linking to their detail page.
+- **Per-user detail** (`/admin/users/[id]`): that user's tier, join
+  date, activity count, a full usage-event breakdown and recent-activity
+  log, and a **Membership panel** to set their tier and expiry date
+  directly — bypassing Stripe entirely (mirrors the beta-trial comp
+  pattern), so it composes with rather than conflicts with real billing:
+  an existing paid subscription keeps renewing/cancelling via Stripe
+  webhooks regardless of what the override sets.
+- **Churned users** (`/admin/churned`): when someone deletes their own
+  account (see below), a snapshot of who they were and why they left is
+  kept here specifically so the operator can follow up for feedback —
+  name, email, tier at the time, signup date, activity count, a usage
+  summary, and an optional free-text reason from the deletion form. The
+  operator can mark a record contacted, leave notes, or purge it
+  outright once follow-up is done (or a former user asks for even this
+  to be erased — see below).
 
-Same as before: push this folder to a repo, `vercel.com/new` → import →
-deploy. Framework auto-detects as Next.js.
+Every route under `/api/admin/*` re-checks the admin session
+independently; there is no code path from a user session to an admin
+one.
 
-### 5. Point Strava's callback domain at the real URL, then test
+### Privacy, data control, and account deletion
 
-Update the Strava app's Authorization Callback Domain to your actual
-Vercel domain. Open the site, sign up, connect Strava, import.
+The account page's **Danger zone** lets an athlete permanently delete
+their own account — immediately and irreversibly erasing their profile,
+every imported activity, gear record, training and race-day plan, and
+cached AI insight (every table with a `user_id` column cascades on
+delete). The one disclosed exception: name, email, membership tier, and
+a usage summary (not the activities or plans themselves) are retained in
+the admin module's churned-users list, specifically so the operator can
+follow up about the athlete's reason for leaving — an optional field on
+the deletion form itself. Both the deletion confirmation screen and the
+[Privacy Policy](app/privacy/page.js) disclose exactly what's retained
+and offer an email-based opt-out to erase that too.
+
+`/privacy` and `/terms` are full, plain-language policy pages linked
+from every page's footer (`components/SiteFooter.js`); the contact
+address on both is configurable via `CONTACT_EMAIL` rather than
+hardcoded.
+
+### Marketing site
+
+The signed-out home page (`app/page.js`) has a two-column hero with a
+telemetry-card visual, a "see it land on your feed" social-proof mockup,
+a feature grid, and (when the beta trial is active) a promo banner —
+pricing itself lives on its own `/pricing` page rather than crowding the
+home page. All of it, plus every page behind login, shares one
+`<title>`/description pattern and one footer.
 
 ## The "bring your own Strava app" option — a deliberate tradeoff
 
@@ -131,519 +447,150 @@ rate-limit consumption) before assuming this needs solving at all.
 `lib/insights.js` computes two things from a user's own imported
 activities, both openly heuristic:
 
-- **Training load**: a duration × intensity proxy (heart rate,
-  falling back to power, then pace) rolled into a 7-day/28-day
-  acute:chronic ratio. This is *not* real TRIMP (that needs resting/max
-  HR, which Strava's API doesn't hand over) and it's *not* a medical or
-  coaching assessment — it's a commonly-cited sports-science rule of
-  thumb, and the returned `note` field says so; keep that note visible
-  in any UI that shows the number.
+- **Training load**: a duration × intensity proxy (heart rate, falling
+  back to power, then pace) rolled into a 7-day/28-day acute:chronic
+  ratio. This is *not* real TRIMP (that needs resting/max HR, which
+  Strava's API doesn't hand over) and it's *not* a medical or coaching
+  assessment — a commonly-cited sports-science rule of thumb, and the
+  returned `note` field says so.
 - **Race pace**: Riegel's formula (`T2 = T1 * (D2/D1)^1.06`) applied to
   the user's fastest sustained recent run. Well-known, still a rough
   estimate — taper, weather, and terrain all move the real result.
 
-"Real-time" and "autonomous" were in the original ask; what's actually
-built is a **recomputed-on-demand** panel, refreshed whenever activities
-are re-imported. True real-time would mean Strava's push-webhook API
-(`POST /push_subscriptions`) driving a background worker that updates
-the dashboard the moment a workout finishes — a genuinely different
-piece of infrastructure (a queue, a running process, not just
-serverless functions) that isn't in this build. "Autonomous" in the
-sense of the product adjusting someone's *future* training plan on its
-own is further still — that's a training-plan engine, not a dashboard
-panel. Both are reasonable v2 directions, not implied by what's here.
+What's built is a **recomputed-on-demand** panel, refreshed whenever
+activities are re-imported — not a real-time push from Strava's
+webhook API (`POST /push_subscriptions`), which would need a background
+worker this serverless build doesn't have, and not the product
+autonomously rewriting someone's future training plan on its own (the
+training-plan deviation feature above surfaces the drift and lets the
+athlete decide, deliberately stopping short of an unreviewed automatic
+change).
 
-## Accounts: signup, Google login, and the account page
+## Deploy guide
 
-Signup collects full name, email, date of birth, password, and password
-confirmation, then emails a 6-digit code (via Resend — see env vars
-above) that has to be entered before the account can log in. Accounts
-require an age of 13 or older — signup is rejected server-side (not just
-in the UI) for anyone younger. "Continue with Google" is available on
-both the signup and login pages; a Google sign-in is email-verified
-automatically (Google already confirmed it) and links to an existing
-password-based account with the same email if one exists. Google's basic
-profile scope doesn't include date of birth, so the age check can't run
-at that point — new Google sign-ups are instead sent to the account page
-with a prompt to confirm their date of birth there (also enforced at 13+).
+### 1. Register a Strava API application
 
-Logged-in users get a **My account** page (linked from the dashboard
-header) to change their name, email (also re-verified by code, sent to
-the *new* address), and password. There's still no self-service
-"forgot password" flow — add one before a public launch if you don't
-want support tickets over locked-out accounts.
+<https://www.strava.com/settings/api> → note the **Client ID** and
+**Client Secret** → set **Authorization Callback Domain** to your
+Vercel domain (bare domain, no scheme/path). This is the *platform*
+app — the one every user gets by default with one click.
 
-## Dashboard layout
+### 2. Provision a Postgres database
 
-Main column, top to bottom: Training load, Biomechanical &amp;
-Overtraining Shield, then Telemetry overlays. A right-hand sidebar
-(sticky — stays in view as the main column scrolls, with its own
-independent scroll once the list is tall) holds Equipment Lifecycle
-&amp; Telemetry. All of it only renders once there's data to compute
-from (Strava connected, activities imported).
+Any of these work — the code only uses standard `pg`, nothing
+provider-specific:
 
-## Telemetry overlays: one summary infographic, not 30 cards
+- **Vercel Postgres**: Project → Storage → Create Database → Postgres.
+  Vercel injects a `DATABASE_URL`-compatible connection string
+  automatically when you link it to the project (check the exact env
+  var name it creates — `POSTGRES_URL` in some plans — and either use
+  that name or add a `DATABASE_URL` env var pointing to the same value).
+- **Neon** (neon.tech) or **Supabase**: create a project, copy the
+  connection string (the pooled one, for serverless) into `DATABASE_URL`.
 
-This used to be a gallery of 30 individual per-activity cards (one
-telemetry overlay per imported activity). It's now a single infographic
-summarizing the whole imported period instead — `lib/telemetrySummary.js`
-aggregates every stored activity into one bundle, `lib/telemetrySummarySvg.js`
-draws it, and `/api/telemetry-summary` serves it as SVG (for the on-page
-preview — being vector, it scales cleanly to any container width, which
-is what makes it "responsive" without a second rendering path) or PNG
-(for the "Save as image" button, via the same `lib/renderPng.js`
-rasterizer the rest of the app uses). The per-activity overlay engine
-(`lib/svg.js`, `/api/overlay`) wasn't touched — it's still what
-`/api/mcp` (the hosted MCP connector) uses for a single activity.
+Then run the schema once:
 
-The infographic has three parts:
+```bash
+psql "$DATABASE_URL" -f schema.sql
+```
 
-- **Total training time**, the date range it spans, and the
-  acute:chronic load figure from the training-load panel.
-- **A fatigue gauge** (`lib/fatigue.js`) — a semi-circle meter, needle
-  position from a 0-100 score. Deterministic, not measured: it blends
-  how many hours since the last activity ended (scaled by how hard that
-  last effort was relative to the athlete's own recent average — a
-  harder effort keeps the needle further right for longer) with a bump
-  when the acute:chronic ratio is already elevated. It's a duration/
-  intensity/recency heuristic from the athlete's own history, the same
-  honest framing as the training-load panel it borrows from — not a
-  physiological measurement (no HRV, no resting-HR baseline).
-- **A training-intensity trend** across the period — the same
-  per-activity load heuristic the training-load panel uses
-  (`estimateLoad`, exported from `lib/insights.js` so the two panels
-  can't tell visually different stories from two different formulas),
-  charted chronologically. Needs at least 2 activities to draw a line;
-  with only 1, it says so instead of showing a broken chart.
-- **Stat tiles** for whichever of avg heart rate / avg power / avg pace
-  the imported activities actually have.
+(Or paste `schema.sql`'s contents into your provider's SQL editor —
+Neon, Supabase, and Vercel Postgres all have one.) `schema.sql` is safe
+to re-run any time the code adds a new table/column — every statement is
+`IF NOT EXISTS`, so re-running it against an existing database only ever
+adds what's missing.
 
-**Weather and humidity are not shown.** The original ask was for
-weather/humidity "across all the activity location," but there's no
-weather API key in this environment (the same gap noted for the
-race-day plan) and Strava's API has no humidity field at all. The one
-real signal available is `average_temp` — a device-recorded temperature
-Strava occasionally returns when the recording device had a sensor —
-now captured on import (`activities.avg_temp_c`) and averaged into a
-"Avg recorded temp" tile when enough activities have it. This is
-explicitly not live weather and the UI doesn't claim otherwise.
+Sanity-check the connection and the encryption round-trip before
+deploying:
 
-## Overtraining Shield — and a real limitation on "age from Strava"
+```bash
+DATABASE_URL="..." ENCRYPTION_KEY="..." node scripts/smoke-test-db.mjs
+```
 
-The dashboard's "Overtraining Shield" panel (formerly "Biomechanical &
-Overtraining Shield" — renamed for brevity, same feature) is a
-**physics-model + LLM** hybrid, not an LLM guessing from raw numbers:
+It creates one throwaway user, verifies things decrypt correctly, and
+deletes everything it made. All five lines should print `✓`.
 
-- **Physics model** (`lib/biomechanics.js`, deterministic, no API
-  calls): computes **aerobic decoupling** (a Pw:HR/Pa:HR efficiency
-  ratio compared between the first and second half of each sustained
-  effort — cardiac drift for the same output is a well-known aerobic-
-  fatigue signal) and **cadence drift** (stride/pedal rate falling late
-  in an effort, a form-breakdown proxy), aggregated across rolling
-  7/30/60/90-day windows of whatever's actually been imported. Both
-  numbers are shown directly on the dashboard regardless of whether the
-  AI call below succeeds, fails, or is rate-limited — they cost nothing
-  and need no LLM to be useful. This needs `time`, `heartrate`,
-  `velocity_smooth`/`watts`, and `cadence` streams, which `/api/import`
-  now requests from Strava and stores (trimmed, like the existing
-  elevation/heart-rate/power arrays) in `activities.trace`; activities
-  imported before this feature shipped won't have them until re-synced.
-  The **acute:chronic workload ratio** (ACWR, from the training-load
-  panel) rounds out the physics layer — above ~1.5 is a commonly-cited
-  sudden-spike injury-risk range.
-- **LLM layer** (`lib/anthropic.js`, Claude, requires
-  `ANTHROPIC_API_KEY`): given the athlete's aggregated activity summary
-  *plus* those deterministic decoupling/cadence/ACWR numbers, returns a
-  structured risk level/score, specific risk factors (grounded in the
-  actual physics numbers when they're notable), a recovery and nutrition
-  plan, and an optional `training_adjustment` — a few concrete near-term
-  training tweaks, populated only when the data actually signals a
-  problem. This is a wellness heuristic written by an LLM, not a medical
-  assessment, and the UI keeps that disclaimer visible.
+### 3. Set environment variables in Vercel
 
-`training_adjustment` deliberately does **not** rewrite the athlete's
-saved training plan automatically — it's shown as guidance with a link
-to the Training plan page. Auto-mutating a saved plan from a background
-signal is exactly the kind of surprising, hard-to-review automated
-action this app avoids; a human confirms the change instead.
+| Name | Value |
+|---|---|
+| `STRAVA_CLIENT_ID` | from step 1 |
+| `STRAVA_CLIENT_SECRET` | from step 1 |
+| `SESSION_SECRET` | random 32+ chars — `openssl rand -base64 32` |
+| `ENCRYPTION_KEY` | random 32+ chars — a **different** value than `SESSION_SECRET` |
+| `DATABASE_URL` | from step 2 |
+| `RESEND_API_KEY` | from [resend.com](https://resend.com) — sends signup/email-change/password-reset verification codes. Without it, codes are just logged to the server console (fine for local dev, not production). |
+| `EMAIL_FROM` | optional — the From address for those emails, e.g. `Splitline <noreply@yourdomain.com>` (must be a domain verified in Resend) |
+| `CONTACT_EMAIL` | optional — the address `/privacy` and `/terms` point people to for data requests and legal notices, and where a former user can ask to have their churned-user record erased too. Defaults to a placeholder — set this before a real launch. |
+| `SITE_URL` | optional — the canonical URL the QR code on shared PDF/PNG exports points back to. Defaults to a placeholder — set this to your real domain. |
+| `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET` | optional — from [Google Cloud Console → APIs & Services → Credentials](https://console.cloud.google.com/apis/credentials) (OAuth client ID, type "Web application", authorized redirect URI `https://your-domain/api/auth/google/callback`). Without these, the "Continue with Google" buttons redirect to an error instead of Google. |
+| `ANTHROPIC_API_KEY` | from [console.anthropic.com](https://console.anthropic.com) — powers the Overtraining Shield panel, the training plan, its deviation-detection check, and the race-day plan. Without it, those just show "couldn't generate"; the rest of the app is unaffected. |
+| `STRIPE_SECRET_KEY` | from the Stripe dashboard → Developers → API keys — powers Plus/Pro checkout and the billing portal. Without it, upgrade buttons return a clear "billing not configured" error; Free tier and everything else work fine. |
+| `STRIPE_WEBHOOK_SECRET` | from Stripe dashboard → Developers → Webhooks → your endpoint's "Signing secret", after pointing an endpoint at `/api/stripe/webhook` — see "Membership tiers and billing" above for which events to subscribe it to. |
+| `NEXT_PUBLIC_BETA_PRO_TRIAL_DAYS` | optional — how many days of free Pro tier new signups get (default 90; `0` turns the promo off). Must keep the `NEXT_PUBLIC_` prefix — the home page's beta banner reads it in the browser, and Next only exposes prefixed env vars there, inlined at build time (so a value change needs a redeploy either way). |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | credentials for `/admin` — a separate module for the site operator only, not a user account and not linked from anywhere in the normal app. Without both set, `/admin/login` returns "not configured" and nobody can sign in. |
 
-**Age does not actually come from Strava.** Strava's public API
-(`GET /athlete`) does not return date of birth for any account — it
-never has, for privacy reasons — so there is no field `lib/strava.js`
-could read to compute age. Instead, the account page has an optional
-"date of birth" field the athlete fills in themselves; if it's set, age
-is passed to the model, and if not, the panel says so and reasons from
-training patterns alone rather than guessing. This is the honest
-tradeoff for a feature described as "getting age from Strava" — that
-data point isn't available from Strava at all.
+### 4. Push to Git, import into Vercel, deploy
 
-Results are cached per user (`ai_insights` table) and only regenerated
-when the underlying activity summary actually changes — the model isn't
-called on every page load. There's no manual "Refresh" button; in
-practice this means a "Re-sync from Strava" is what refreshes the
-panel, since that's what changes the activity summary the input hash is
-computed from (subject to the same tier-based rate limit either way).
+Push this folder to a repo, `vercel.com/new` → import → deploy.
+Framework auto-detects as Next.js.
 
-## Equipment Lifecycle & Telemetry
+### 5. Point Strava's callback domain at the real URL, then test
 
-A sidebar (sticky, right-hand side, scrolls independently once the list
-is tall) estimating wear on all of the athlete's registered Strava gear
-(shoes and bikes) — **entirely deterministic, no LLM call**: the
-underlying logic (mileage ÷ a lifespan threshold) is formulaic rule
-evaluation, not something a language model improves, so this panel
-costs nothing against the membership tiers' AI budget.
-
-- `/api/import` fetches the athlete's **complete gear roster** via
-  `GET /athlete` (which returns `shoes`/`bikes` arrays — every piece of
-  gear ever registered — only for the token's own owner) once per
-  import/re-sync run, then `/gear/{id}` per item for full detail (name,
-  brand, model, lifetime distance, retired status), caching all of it in
-  a `gear` table. This runs regardless of what's tagged on the 30
-  imported activities — deriving gear purely from `activity.gear_id`, as
-  an earlier version of this feature did, would silently miss anything
-  the athlete hadn't worn in their last 30 activities. Gear the athlete
-  has marked **retired** on Strava is fetched too (so its status stays
-  known) but filtered out of what the panel displays — a retired shoe
-  isn't something that still needs replacing.
-- `lib/equipment.js` estimates a shoe's midsole lifespan at 700km by
-  default, scaled down for body weight above a 70kg reference (self-
-  reported, optional — same "Strava doesn't expose this" reasoning as
-  birth date, see above; account page has a "Body weight" field), and a
-  bike's chain-wear mileage at a flat 3000km. 85%+ of that threshold is
-  flagged "nearing replacement", 100%+ "replace soon", matching the
-  original spec's 85% figure. The list sorts by mileage, so whatever
-  needs replacing soonest sits at the top of the sidebar.
-- Flagged gear gets a **"Shop replacement options"** link — a plain
-  Google Shopping search built from the gear's brand/model, opened in a
-  new tab. This is deliberately informational only: no affiliate
-  account, no automated purchase, no real transaction of any kind.
-  Automating an actual purchase — spending the athlete's money without
-  them explicitly clicking through and choosing — is exactly the kind
-  of irreversible action this app avoids taking on someone's behalf.
-
-## Race-day plan
-
-Under the top nav's **Training** menu, a page that turns the athlete's
-saved event (from Training plan) plus race-day conditions they enter
-themselves into an AI-generated pacing and fueling plan
-(`lib/anthropic.js`'s `generateRaceDayPlan`, requires
-`ANTHROPIC_API_KEY`): overall pacing strategy, target pace per segment,
-a timed fueling/hydration plan, heat/altitude adjustments, a pre-race
-checklist, and contingency notes. Tier-gated and cached exactly like the
-training plan (`race_day_plans` table, `ai_usage` feature `race_day`) —
-regenerating only actually calls Claude when the goal, the athlete's
-activity data, or the entered conditions have changed.
-
-`lib/raceDay.js` derives a **grade-adjusted pace factor** — how much
-this specific athlete's pace slows per 1% of average uphill grade —
-from their own flat-vs-hilly run history when there's enough of it
-(`basis: "athlete_history"`), falling back to a documented ~3%-per-1%
-heuristic otherwise (`basis: "default_heuristic"`); the LLM is told
-which basis was used. This is intentionally simpler than a true grade-
-adjusted-pace model: only whole-activity average distance/elevation/time
-are stored, not per-kilometer splits, so it's a coarse comparison, not a
-Strava-grade-adjusted-pace-equivalent calculation.
-
-Three things in the original spec for this feature are **not** built,
-and don't have a reasonable path to being built inside a Next.js web
-dashboard:
-
-- **No GPX course upload.** The athlete enters total course elevation
-  gain as a plain number instead of uploading a course file for the app
-  to parse.
-- **No live weather pull.** No weather API key exists in this
-  environment; the athlete enters an expected temperature/humidity
-  themselves rather than the app fetching a forecast.
-- **No real-time audio cues.** That needs a native/mobile companion
-  app doing GPS-triggered audio playback *during* the actual race — a
-  fundamentally different piece of software than a web dashboard can
-  provide. The plan instead renders on-page and downloads as a plain
-  text pace/fueling sheet.
-
-## Light/dark appearance
-
-A theme toggle appears on every page: a standalone button
-(`components/ThemeToggle.js`) on the marketing/auth/account pages, and as
-a "Light mode"/"Dark mode" item inside the dashboard's user menu
-(`components/UserMenu.js` — see below) so it doesn't compete with that
-page's own toggles. Both write `data-theme` on `<html>` and persist the
-choice to `localStorage` — there's no server-side account setting for it,
-so it's per-browser, not per-account. An inline script in `app/layout.js`
-applies the stored theme before first paint to avoid a flash of the wrong
-colors; that script intentionally runs before React hydrates, which is
-why `<html>` carries `suppressHydrationWarning`. Light mode reuses the
-same warm-paper palette as the "paper" overlay card theme, so the brand
-stays consistent across both surfaces.
-
-Every page behind login shares one header (`components/AppHeader.js`):
-the wordmark, a persistent primary nav (Dashboard, Training) next to it
-(`components/TopNav.js`), and the athlete's name/tier on the right, which
-opens a dropdown (My account, Light/dark mode, font size, Log out)
-instead of spreading those as flat links — `components/UserMenu.js`.
-
-## Training plan for an upcoming event
-
-The top nav's **Training** menu has a **Training plan** link that takes
-an athlete to set one upcoming event
-— a running race, duathlon, or triathlon, with a required name, a
-distance chosen from a dropdown scoped to that event type, and a goal
-finish time chosen from a dropdown scoped to that distance
-(`lib/eventTypes.js` is the single source of truth for all of this, for
-both the form and the server-side validation in `/api/event`):
-
-- **Running:** 5K, 10K, Half Marathon, Marathon, Ultra (50K+) — each with its own goal-time bands
-- **Duathlon:** Sprint (5K run – 30K bike – 5K run), Standard (10K–60K–10K)
-- **Triathlon:** Sprint, Olympic Distance, Half Ironman (70.3), Full Ironman (140.6)
-
-Goal time is a coarse band ("1:45–2:00", "Under 3:00", …) rather than a
-raw duration picker — enough for the AI plan to target a real pace
-without turning the form into two more dropdowns, and "No specific goal —
-just finish" is always an option. The event date has to be at least 4
-weeks out (enforced server-side, so there's room for a real progressive
-plan).
-
-Once set, `/api/training-plan` sends the same aggregated activity summary
-used by the injury-risk panel, plus the event type, distance, goal time,
-and exact weeks remaining, to Claude, which returns a detailed periodized
-plan (`lib/anthropic.js`'s `generateTrainingPlan`):
-
-- **3-8 phases** (e.g. Base/Build/Peak/Taper) spanning the full time to
-  the event — grouped into phases rather than one entry per week, since
-  that range can be a month or most of a year — each with its focus,
-  weekly volume guidance, a **weekly time-commitment estimate** (e.g.
-  "5-7 hours/week"), key workouts, and a `relative_load` value (0-100)
-  the model assigns consistently phase to phase.
-- A **training-progress chart** (`lib/progressChart.js`) plotting that
-  `relative_load` across phases as a line/area illustration, rendered
-  inline on the training-plan page and colored from the current theme —
-  the site's own accent color as the one series (a single series needs no
-  legend; the "Training progress" heading names it). It isn't part of the
-  image-export feature above, which is scoped to the two dashboard panels.
-- Detailed recovery guidelines, a nutrition plan, pre-race preparation
-  (48-72h out), and a race-day strategy — 5-8 bullets each, with pacing
-  in the race-day strategy tied to the chosen goal time when one was set.
-
-Like the injury panel, the plan is cached (`training_plans` table) and
-only regenerated when the goal or the underlying activity data changes,
-or via the page's "Refresh plan" button. Setting a new event clears any
-previously cached plan.
-
-This is the heaviest AI call in the app (a bigger structured schema than
-the injury panel, now bigger still with the richer per-phase detail), so
-it runs at `effort: "medium"` rather than `"high"` and `max_tokens: 6000`
-to leave headroom for the longer output — `/api/training-plan` sets
-`maxDuration = 60`, but **that ceiling only applies on Vercel's Pro plan
-or above; the Hobby plan hard-caps every serverless function at 10
-seconds regardless of what the code requests**, and a slow AI call that
-gets killed mid-flight used to come back as an empty response that broke
-`res.json()` client-side with a raw "Unexpected end of JSON input" error.
-Both `/api/event` and `/api/training-plan` now wrap their logic in
-try/catch so an unexpected failure — including a Postgres "relation ...
-does not exist" error from `schema.sql` not having been (re-)run yet,
-detected by `lib/db.js`'s `friendlyDbErrorMessage` and turned into an
-actionable message — always returns a proper JSON error instead of a raw
-connection cutoff, and the client (`safeJson` in
-`app/training-plan/page.js`) parses defensively either way. But if
-training-plan generation times out consistently despite that, the Hobby
-plan's 10-second cap is the first thing to check — the richer plan this
-version generates makes that more likely to bite, not less.
-
-### Comparing actual training against the plan
-
-Every "Re-sync from Strava" also checks whether actual training since
-the current plan was generated has drifted meaningfully from what the
-plan called for. `lib/trainingPlanDeviation.js` buckets the activities
-imported since the plan's `generated_at` into calendar weeks counted
-from that start date, and `/api/training-plan/deviation` hands those —
-plus the plan's own phases (guidance text, not rigid per-week numbers)
-and the athlete's training-load/biomechanics signals — to a dedicated
-Claude call, `generateTrainingPlanDeviation` in `lib/anthropic.js`.
-Unlike the injury and training-plan features, there's no strict formula
-for "10% off plan": the plan itself is expressed as guidance ranges, not
-fixed numeric weekly targets, so the model makes that judgment call
-directly, the same way it already judges risk level or training
-adjustments elsewhere in the app. It returns which of distance, pace,
-power, heart rate, or fatigue look off by roughly 10% or more and in
-which direction, a week-by-week status ("on track" / "missed" /
-"exceeded" / "insufficient data") matched back to the plan's own phase
-names, and a likelihood assessment of whether the drift, if it
-continues, would actually threaten the event goal.
-
-A significant deviation surfaces as an alert panel at the top of the
-dashboard with three choices: **regenerate** the plan from scratch,
-**adjust** the existing plan's upcoming phases around the deviation
-(`generateAdjustedTrainingPlan`, both sharing `generateTrainingPlan`'s
-output schema so either result caches and renders exactly like a normal
-plan), or **continue** with the current plan as-is. Choosing "continue"
-doesn't change the plan; it marks the deviation `acknowledged`
-(`training_plan_deviations` table), and the Training Plan page then
-annotates each affected phase with the specific weeks that were off and
-by how much, plus the persisted goal-impact analysis. This check shares
-the training-plan feature's own tier-based rate limit (`ai_usage`,
-feature `training_plan`) rather than getting a limit of its own —
-regenerating, adjusting, and the deviation check itself all draw from
-the same budget, consistent with how an auto-triggered plan
-regeneration already spends from it today; when the tier isn't eligible,
-the background check just silently skips rather than showing a locked
-state (it isn't a user-clicked action). A new plan — regenerated,
-adjusted, or simply because the goal changed — always clears any prior
-deviation record, since there's nothing meaningful left to compare
-against once the plan itself has changed.
-
-## Membership tiers, display font size, and billing
-
-### Free / Plus / Pro
-
-Every account starts on **Free**. The three tiers (`lib/membership.js`)
-don't gate *access* to a feature — they gate how often the two AI
-features (the injury/recovery/nutrition panel, the training plan) are
-allowed to actually call Claude, since that's the real cost driver in
-this app:
-
-| Tier | Price | AI refresh cadence |
-|---|---|---|
-| Free | $0 | once every 90 days |
-| Plus | $1.99/mo or $19.99/yr | once every 30 days |
-| Pro | $2.99/mo or $29.99/yr | unlimited |
-
-This is enforced server-side in `/api/insights` and `/api/training-plan`,
-not just displayed — see `lib/membership.js`'s `isRefreshEligible` /
-`nextEligibleDate`, backed by a new `ai_usage` table that records the
-last time each feature *actually generated* for a user, independent of
-whatever's currently cached. That last part matters: changing a
-training-plan goal deliberately does **not** delete the previous cached
-plan or reset the refresh clock (see the comment in `saveRaceGoal`,
-`lib/db.js`) — otherwise a free-tier user could bypass the 90-day limit
-just by re-entering their event. When the tier isn't eligible to
-regenerate and the cached plan is for a *different* goal than the
-current one, the API returns `plan: null` rather than showing a plan for
-the wrong race — `app/training-plan/page.js` and the dashboard's injury
-panel both surface a "locked" message with the next eligible date and an
-upgrade link when this happens.
-
-A user's tier is only ever the source of truth via
-`resolveEffectiveTier()` (`lib/membership.js`), never `user.tier`
-directly — a stored tier can be *lapsed* (a subscription period ended, a
-promo expired) without anything having written "free" back to the row
-yet, and that function is where expiry actually gets resolved, on every
-read. There's no cron job downgrading accounts; a `tier_expires_at` in
-the past just stops counting starting from the next request.
-
-### Display font size
-
-A +/-/reset control lives in the dashboard's hamburger menu
-(`components/UserMenu.js`) and writes a `--fs-scale` CSS custom property
-(`lib/fontSize.js` for the shared bounds/storage key), which every
-`font-size` declaration in `globals.css` is expressed as a `calc()`
-multiple of. Like the theme, it's applied before first paint by the
-inline script in `app/layout.js` (reading the same `localStorage` key) to
-avoid a resize flash, and persists per-browser, not per-account.
-
-### Stripe billing
-
-Upgrading (`/api/billing/checkout`) creates a Stripe Checkout Session
-with the price built **inline** via `price_data` rather than a
-pre-created Stripe Price object — `lib/pricing.js` is the only file that
-needs editing to change what athletes pay; nothing needs to stay in sync
-on the Stripe dashboard side. `allow_promotion_codes: true` is set on
-every session, so creating a seasonal discount is a Stripe-dashboard-only
-action (Coupons → create one, optionally scoped to a Promotion Code) —
-no code change needed. A "Manage billing" link
-(`/api/billing/portal`) opens Stripe's hosted Customer Portal for
-updating a payment method, viewing invoices, or canceling; deliberately
-*not* used for plan switching, since the portal's self-serve plan
-switcher needs pre-created Prices in a product catalog, which would
-conflict with pricing living entirely in code. Upgrades, renewals, and
-plan changes all go back through a fresh Checkout session instead — the
-account page's "Subscribe" buttons work for all three.
-
-`/api/stripe/webhook` verifies the signature (`STRIPE_WEBHOOK_SECRET`)
-and handles three event types: `checkout.session.completed` (grants the
-tier and sets `tier_expires_at` to the new subscription's period end),
-`invoice.payment_succeeded` (extends `tier_expires_at` on automatic
-recurring renewals — skipped for the invoice tied to the *initial*
-checkout, which the first event already handled), and
-`customer.subscription.deleted` (just detaches the dead subscription id;
-doesn't force an immediate downgrade, since `tier_expires_at` already
-reflects the paid-through date and `resolveEffectiveTier` naturally
-treats it as lapsed once that date passes). One thing worth knowing if
-you're extending this: recent Stripe API versions moved
-`current_period_end` off the top-level Subscription object onto each
-subscription item (`subscription.items.data[0].current_period_end`), and
-moved `invoice.subscription` to
-`invoice.parent.subscription_details.subscription` — both are easy to
-get wrong from memory/older examples, and the installed `stripe` npm
-package's own type definitions are the fastest way to check current
-field names before changing this code.
-
-**None of this has been tested against a real Stripe account** — there's
-no live key in this environment. The integration is written correctly
-against the installed SDK version's actual types (verified line by line,
-not from memory), but before going live: set `STRIPE_SECRET_KEY` and
-`STRIPE_WEBHOOK_SECRET` (from the Stripe dashboard's Developers →
-Webhooks, pointed at `/api/stripe/webhook`, subscribed to at least
-`checkout.session.completed`, `invoice.payment_succeeded`, and
-`customer.subscription.deleted`), and run an actual test-mode checkout
-end to end before trusting it with real cards.
-
-### Beta Pro trial
-
-New signups (both password and Google) are granted **Pro tier free for
-`BETA_PRO_TRIAL_DAYS` days** (`lib/membership.js`, currently 90) via the
-same `tier`/`tier_expires_at` mechanism as a paid subscription — there's
-no separate "trial" concept. Set that constant to `0` to turn the promo
-off for new signups; accounts already granted a trial keep whatever
-`tier_expires_at` they got, since expiry is resolved per-account, not
-globally. The home page's pricing section reads this same constant to
-show (or hide) the beta banner, so turning it off there is automatic too.
+Update the Strava app's Authorization Callback Domain to your actual
+Vercel domain. Open the site, sign up, connect Strava, import.
 
 ## What's still simple on purpose (MVP tradeoffs)
 
 - **No webhook / auto-import.** Someone has to click Import (or
   Re-sync). Strava's push-subscription API would close that gap.
-- **No self-service password reset** (see above) — signup/login/email
-  verification/Google sign-in are all there, but a locked-out user with
-  no working password currently has no recovery flow of their own.
 - **Stripe billing is untested against a live account.** The checkout,
   portal, and webhook code is complete and was checked against the
-  installed `stripe` SDK's own type definitions (catching two real
-  field-name changes along the way — see the billing section above),
-  but no test-mode Stripe keys were available in this environment, so
-  none of it has been exercised against Stripe's actual API. Run a
-  real test-mode checkout before trusting it with payments.
+  installed `stripe` SDK's own type definitions, but no test-mode Stripe
+  keys were available in this environment, so none of it has been
+  exercised against Stripe's actual API. Run a real test-mode checkout
+  before trusting it with payments.
 - **No proration on plan switches.** Each "Subscribe" click starts a
-  fresh Checkout Session; Stripe treats it as a new subscription
-  rather than modifying/prorating an existing one in place. A user
-  switching Plus → Pro (or monthly → yearly) ends up with two
-  subscriptions unless the old one is cancelled first via the billing
-  portal.
-- **No dunning / `past_due` handling.** The webhook only reacts to
-  `checkout.session.completed`, `invoice.payment_succeeded`, and
-  `customer.subscription.deleted` — a failed renewal charge doesn't
-  currently downgrade the user or prompt them to update their card
-  until the subscription is fully cancelled.
+  fresh Checkout Session; a user switching Plus → Pro (or monthly →
+  yearly) ends up with two subscriptions unless the old one is
+  cancelled first via the billing portal.
+- **No dunning / `past_due` handling.** A failed renewal charge doesn't
+  currently downgrade the user or prompt them until the subscription is
+  fully cancelled.
 - **Gear data only populates on (re-)import.** Activities imported
   before the Equipment Lifecycle feature shipped won't show gear until
-  the athlete hits Re-sync, which re-fetches each activity's detail
-  (including `gear_id`) from Strava.
-- **Decoupling/cadence-drift need real streams to say anything.** Short
-  or interval activities, or ones missing heart-rate plus pace/power/
-  cadence data, simply don't produce a reading for that activity — the
-  panel says so rather than guessing from insufficient data.
+  the athlete hits Re-sync.
+- **Decoupling/cadence-drift and the training-plan deviation check both
+  need enough real data to say anything.** Short/interval activities,
+  or ones missing the right streams, don't produce a reading; a plan
+  younger than a week, or with no new activity since it was generated,
+  simply isn't checked yet.
 - **The grade-adjustment factor behind the race-day plan is coarse.**
-  It's derived from whole-activity average pace/elevation, not
-  per-kilometer splits (none are stored), so it's a directional
-  comparison of the athlete's own hilly vs. flat runs, not a precise
-  grade-adjusted-pace model.
+  Derived from whole-activity average pace/elevation, not per-kilometer
+  splits (none are stored) — a directional comparison, not a
+  Strava-grade-adjusted-pace-equivalent calculation.
+- **No live weather, no GPX upload, no real-time race-day audio** — see
+  "Race-day plan" above for why each doesn't have a reasonable path
+  inside a web dashboard.
+- **Avatars are stored as data URIs in Postgres, not object storage.**
+  Fine at this scale (capped ~1.5MB decoded); would need to move to
+  blob storage well before that becomes a real constraint.
 
 ## Local development
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in all five values
+cp .env.example .env.local   # fill in the values you need for what you're testing
 psql "$DATABASE_URL" -f schema.sql
 npm run dev
 ```
 
+`.env.example` lists every variable this app reads, each with a comment
+on what breaks (if anything) when it's left unset — you don't need all
+of them for local work, just `DATABASE_URL`, `SESSION_SECRET`, and
+`ENCRYPTION_KEY` at minimum (verification codes fall back to the server
+console without `RESEND_API_KEY`).
+
 For local Strava OAuth testing, set the app's Authorization Callback
-Domain to `localhost` (Strava allows this).
+Domain to `localhost` (Strava allows this). For local admin testing, set
+`ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env.local` too.
