@@ -30,6 +30,8 @@ export default function ActivitiesPage() {
   const [activities, setActivities] = useState([]);
   const [previews, setPreviews] = useState({});
   const [savingId, setSavingId] = useState(null);
+  const [postingId, setPostingId] = useState(null);
+  const [postHint, setPostHint] = useState(null); // { id, text }
   const [theme, setTheme] = useState("ink");
   const [units, setUnits] = useState("metric");
 
@@ -69,25 +71,74 @@ export default function ActivitiesPage() {
     loadPreviews(activities, theme, next);
   }
 
+  function fileNameFor(name) {
+    return `splitline-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}.png`;
+  }
+
+  async function fetchCardBlob(activityId) {
+    const res = await fetch("/api/overlay", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ activity_id: activityId, theme, units, format: "png" }),
+    });
+    if (!res.ok) return null;
+    return res.blob();
+  }
+
+  function downloadBlob(blob, filename) {
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+  }
+
+  function showPostHint(activityId, text) {
+    setPostHint({ id: activityId, text });
+    setTimeout(() => setPostHint((h) => (h?.id === activityId ? null : h)), 5000);
+  }
+
   async function saveCard(activityId, name) {
     setSavingId(activityId);
     try {
-      const res = await fetch("/api/overlay", {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ activity_id: activityId, theme, units, format: "png" }),
-      });
-      if (!res.ok) return;
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `splitline-${name.toLowerCase().replace(/[^a-z0-9]+/g, "-").slice(0, 40)}.png`;
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
+      const blob = await fetchCardBlob(activityId);
+      if (!blob) return;
+      downloadBlob(blob, fileNameFor(name));
     } finally {
       setSavingId(null);
+    }
+  }
+
+  // Strava's public API has no endpoint for creating an image feed post on
+  // a user's behalf, so this hands the rendered card to the OS-level share
+  // sheet instead (Web Share API, level 2 — file sharing) — on a phone with
+  // the Strava app installed, Strava shows up as a share target there, the
+  // same way it does from a phone's own photo gallery. Where that's not
+  // supported (most desktop browsers), it falls back to the same download
+  // as "Save as image" with a hint to share it manually from the Strava app.
+  async function postToStrava(activityId, name) {
+    setPostingId(activityId);
+    try {
+      const blob = await fetchCardBlob(activityId);
+      if (!blob) return;
+      const filename = fileNameFor(name);
+      const file = new File([blob], filename, { type: "image/png" });
+      const shareData = { files: [file], title: name, text: `${name} — via Splitline` };
+      if (navigator.canShare && navigator.canShare(shareData)) {
+        try {
+          await navigator.share(shareData);
+        } catch (e) {
+          if (e.name !== "AbortError") downloadBlob(blob, filename);
+        }
+      } else {
+        downloadBlob(blob, filename);
+        showPostHint(activityId, "Your browser can't hand this image to Strava directly — downloaded instead. Open it from the Strava app to post.");
+      }
+    } finally {
+      setPostingId(null);
     }
   }
 
@@ -135,13 +186,15 @@ export default function ActivitiesPage() {
                 )}
                 <div className="gallery-card-footer">
                   <span>{a.name}</span>
-                  <button
-                    style={{ width: "auto", padding: "6px 12px" }}
-                    onClick={() => saveCard(a.id, a.name)}
-                    disabled={savingId === a.id}
-                  >
-                    {savingId === a.id ? "Saving…" : "Save as image"}
-                  </button>
+                  <div className="gallery-card-actions">
+                    <button onClick={() => saveCard(a.id, a.name)} disabled={savingId === a.id}>
+                      {savingId === a.id ? "Saving…" : "Save as image"}
+                    </button>
+                    <button onClick={() => postToStrava(a.id, a.name)} disabled={postingId === a.id}>
+                      {postingId === a.id ? "Preparing…" : "Post to my Strava feed"}
+                    </button>
+                  </div>
+                  {postHint?.id === a.id && <div className="gallery-card-hint">{postHint.text}</div>}
                 </div>
               </div>
             ))}

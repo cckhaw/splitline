@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import SiteFooter from "@/components/SiteFooter";
+import ShareButton from "@/components/ShareButton";
 
 // A response can come back with an empty or non-JSON body — a platform
 // timeout truncating a slow AI call, a proxy error page, a crashed
@@ -207,7 +208,10 @@ export default function RaceDayPage() {
             <div className="panel">
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
                 <h2 style={{ margin: 0 }}>Your pacing &amp; fueling plan</h2>
-                <button style={{ width: "auto", padding: "6px 12px" }} onClick={downloadPlan}>Download as text</button>
+                <div style={{ display: "flex", gap: 8 }}>
+                  <ShareButton kind="race-day" payload={{ athleteName: me.name || me.email, goal, plan }} />
+                  <button style={{ width: "auto", padding: "6px 12px" }} onClick={downloadPlan}>Download as text</button>
+                </div>
               </div>
 
               <div className="hint" style={{ color: "var(--ink)", marginTop: 12 }}>{plan.pacing_strategy}</div>

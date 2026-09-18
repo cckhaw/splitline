@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import SiteFooter from "@/components/SiteFooter";
+import ShareButton from "@/components/ShareButton";
 import { EVENT_TYPES, DISTANCE_OPTIONS, GOAL_TIME_OPTIONS } from "@/lib/eventTypes";
 import { buildProgressChartSvg } from "@/lib/progressChart";
 import { resolveTheme } from "@/lib/theme";
@@ -220,14 +221,17 @@ export default function TrainingPlanPage() {
           <div className="panel">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
               <h2 style={{ margin: 0 }}>AI progressive training plan</h2>
-              <button
-                style={{ width: "auto", padding: "6px 12px" }}
-                onClick={() => loadPlan(true)}
-                disabled={refreshing || loadingPlan || planLocked}
-                title={planLocked ? "Refresh limit reached for your tier" : undefined}
-              >
-                {refreshing ? "Regenerating…" : "Refresh plan"}
-              </button>
+              <div style={{ display: "flex", gap: 8 }}>
+                {plan && <ShareButton kind="training-plan" payload={{ athleteName: me.name || me.email, goal, plan }} />}
+                <button
+                  style={{ width: "auto", padding: "6px 12px" }}
+                  onClick={() => loadPlan(true)}
+                  disabled={refreshing || loadingPlan || planLocked}
+                  title={planLocked ? "Refresh limit reached for your tier" : undefined}
+                >
+                  {refreshing ? "Regenerating…" : "Refresh plan"}
+                </button>
+              </div>
             </div>
 
             {loadingPlan && <div className="hint" style={{ marginTop: 12 }}>Building your plan… this can take up to 30 seconds.</div>}
