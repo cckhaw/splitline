@@ -82,6 +82,11 @@ deletes everything it made. All five lines should print `✓`.
 | `STRIPE_SECRET_KEY` | from the Stripe dashboard → Developers → API keys — powers Plus/Pro checkout and the billing portal. Without it, upgrade buttons return a clear "billing not configured" error; Free tier and everything else work fine. |
 | `STRIPE_WEBHOOK_SECRET` | from Stripe dashboard → Developers → Webhooks → your endpoint's "Signing secret", after pointing an endpoint at `/api/stripe/webhook` — see "Stripe billing" below for which events to subscribe it to. |
 | `NEXT_PUBLIC_BETA_PRO_TRIAL_DAYS` | optional — how many days of free Pro tier new signups get (default 90; `0` turns the promo off). Must keep the `NEXT_PUBLIC_` prefix — the home page's beta banner reads it in the browser, and Next only exposes prefixed env vars there, inlined at build time (so a value change needs a redeploy either way). |
+| `ADMIN_USERNAME` / `ADMIN_PASSWORD` | credentials for `/admin` — a separate module for the site operator only, not a user account and not linked from anywhere in the normal app. Without both set, `/admin/login` returns "not configured" and nobody can sign in. |
+
+### Admin module
+
+`/admin` is a small operator-only dashboard: total users and their membership tier, and a per-user usage breakdown (Strava re-syncs, AI Biomechanical Shield refreshes, training-plan and race-day-plan generations, PDF/PNG/Strava-feed exports) plus a site-wide device/browser split. It signs in with `ADMIN_USERNAME`/`ADMIN_PASSWORD` only — there's no link to it from the rest of the site, it's excluded via `robots.txt`, and its session is a completely separate cookie from user logins, so no user account (however it was created) can ever reach it.
 
 ### 4. Push to Git, import into Vercel, deploy
 

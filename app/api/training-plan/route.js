@@ -5,6 +5,7 @@ import { getActivitiesForUser, getUserById, getRaceGoal, getTrainingPlan, saveTr
 import { buildActivitySummary } from "@/lib/insights";
 import { generateTrainingPlan } from "@/lib/anthropic";
 import { resolveEffectiveTier, isRefreshEligible, nextEligibleDate } from "@/lib/membership";
+import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Pro plan+; Hobby caps this lower regardless — see README.
@@ -68,6 +69,10 @@ export async function GET(request) {
 
   const eligible = isRefreshEligible(tier, usage?.last_used_at);
   if (eligible) {
+    // Reached only when a real generation attempt is about to happen —
+    // either the goal/data changed (a fresh plan) or the user explicitly
+    // hit "Refresh plan" (sameContent && forceRefresh).
+    trackEvent(request, session.userId, "training_plan_generate", { trigger: sameContent ? "refresh" : "generate" });
     try {
       const plan = await generateTrainingPlan(summary, eventInfo);
       try {

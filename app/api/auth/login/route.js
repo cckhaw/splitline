@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getUserByEmail, friendlyDbErrorMessage } from "@/lib/db";
 import { createSession, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
+import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
 
@@ -17,6 +18,8 @@ export async function POST(request) {
     if (!user.email_verified) {
       return NextResponse.json({ error: "email_unverified", message: "Verify your email before logging in.", email: user.email }, { status: 403 });
     }
+
+    trackEvent(request, user.id, "login");
 
     const token = await createSession(user.id);
     const res = NextResponse.json({ ok: true });

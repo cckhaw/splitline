@@ -9,6 +9,7 @@ import { buildActivitySummary } from "@/lib/insights";
 import { computeGradeAdjustment } from "@/lib/raceDay";
 import { generateRaceDayPlan } from "@/lib/anthropic";
 import { resolveEffectiveTier, isRefreshEligible, nextEligibleDate } from "@/lib/membership";
+import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
 export const maxDuration = 60; // Pro plan+; Hobby caps this lower regardless — see README.
@@ -117,6 +118,7 @@ export async function POST(request) {
 
   const eligible = isRefreshEligible(tier, usage?.last_used_at);
   if (eligible) {
+    trackEvent(request, session.userId, "race_day_plan_generate", { trigger: cached ? "regenerate" : "generate" });
     try {
       const plan = await generateRaceDayPlan(summary, eventInfo, raceDayInputs, gradeAdjustment);
       try {

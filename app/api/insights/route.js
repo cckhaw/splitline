@@ -5,6 +5,7 @@ import { getActivitiesForUser, getUserById, getAiInsights, saveAiInsights, getAi
 import { computeTrainingLoad, predictRacePaces, buildActivitySummary } from "@/lib/insights";
 import { generateHealthAnalysis } from "@/lib/anthropic";
 import { resolveEffectiveTier, isRefreshEligible, nextEligibleDate } from "@/lib/membership";
+import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -21,6 +22,10 @@ export async function GET(request) {
 
   const url = new URL(request.url);
   const forceRefresh = url.searchParams.get("refresh") === "1";
+  // Logged on the explicit "Refresh AI analysis" click itself, not on the
+  // silent auto-load — this counts user-initiated refresh requests, tier
+  // lock or generation failure notwithstanding.
+  if (forceRefresh) trackEvent(request, session.userId, "ai_refresh_biomechanical");
 
   let activities, user;
   try {
