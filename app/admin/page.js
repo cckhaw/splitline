@@ -96,6 +96,23 @@ export default function AdminDashboardPage() {
           </div>
 
           <div className="panel">
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
+              <h2 style={{ margin: 0 }}>Churned users</h2>
+              <Link href="/admin/churned">View churned users →</Link>
+            </div>
+            <div className="admin-stat-grid">
+              <div className="admin-stat-tile">
+                <div className="label">Accounts deleted</div>
+                <div className="value">{overview.deletedUserCount}</div>
+              </div>
+              <div className="admin-stat-tile">
+                <div className="label">Not yet contacted</div>
+                <div className="value">{overview.uncontactedDeletedUserCount}</div>
+              </div>
+            </div>
+          </div>
+
+          <div className="panel">
             <h2>Feature usage (site-wide)</h2>
             <div className="hint" style={{ marginTop: -8 }}>
               Total times each feature has been used, across every user, since tracking began.

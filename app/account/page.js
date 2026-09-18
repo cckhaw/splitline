@@ -56,6 +56,7 @@ export default function AccountPage() {
   const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [deleteEmail, setDeleteEmail] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
+  const [deleteReason, setDeleteReason] = useState("");
   const [deleteStatus, setDeleteStatus] = useState("");
   const [deleting, setDeleting] = useState(false);
 
@@ -289,7 +290,7 @@ export default function AccountPage() {
       const res = await fetch("/api/account/delete", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ password: deletePassword, confirmEmail: deleteEmail }),
+        body: JSON.stringify({ password: deletePassword, confirmEmail: deleteEmail, reason: deleteReason }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message || "Couldn't delete your account.");
@@ -525,10 +526,22 @@ export default function AccountPage() {
               insights — none of it can be recovered. You&rsquo;ll need to sign up for a brand new account to
               use Splitline again.
             </div>
+            <div className="hint" style={{ marginTop: 10, marginBottom: 0 }}>
+              The one exception: we keep your name, email, membership tier, and a summary of how you used
+              Splitline (not your activities or plans themselves) so we can follow up about your feedback.
+              That&rsquo;s it — no other data survives.
+            </div>
             <label>Type your email ({me.email}) to confirm</label>
             <input type="email" required value={deleteEmail} onChange={(e) => setDeleteEmail(e.target.value)} />
             <label>Current password{me.hasGoogleLogin ? " (leave blank if you only sign in with Google)" : ""}</label>
             <input type="password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} />
+            <label>Mind telling us why you&rsquo;re leaving? (optional)</label>
+            <textarea
+              rows={3}
+              value={deleteReason}
+              onChange={(e) => setDeleteReason(e.target.value)}
+              placeholder="Helps us improve Splitline — totally optional."
+            />
             {deleteStatus && <div className="status-line warn">{deleteStatus}</div>}
             <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
               <button
@@ -538,7 +551,10 @@ export default function AccountPage() {
               >
                 {deleting ? "Deleting…" : "Permanently delete my account"}
               </button>
-              <button type="button" onClick={() => { setConfirmingDelete(false); setDeleteStatus(""); setDeleteEmail(""); setDeletePassword(""); }}>
+              <button
+                type="button"
+                onClick={() => { setConfirmingDelete(false); setDeleteStatus(""); setDeleteEmail(""); setDeletePassword(""); setDeleteReason(""); }}
+              >
                 Cancel
               </button>
             </div>
