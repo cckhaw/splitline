@@ -462,7 +462,7 @@ export default function AccountPage() {
         <h2>Body weight</h2>
         <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>
           Optional. Heavier impact compresses running-shoe foam faster, so this sharpens the shoe-wear estimate
-          in the Equipment Lifecycle panel on your dashboard — it&rsquo;s used for that estimate only.
+          in the Gears Check panel on your dashboard — it&rsquo;s used for that estimate only.
         </div>
         <form onSubmit={saveWeight}>
           <input

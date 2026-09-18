@@ -28,6 +28,9 @@ export default function TopNav() {
       <Link href="/app" className={`top-nav-link${pathname === "/app" ? " active" : ""}`}>
         Dashboard
       </Link>
+      <Link href="/activities" className={`top-nav-link${pathname === "/activities" ? " active" : ""}`}>
+        Last 30 Activities
+      </Link>
       <div className="top-nav-item" ref={ref}>
         <button
           type="button"

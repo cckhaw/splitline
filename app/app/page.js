@@ -435,7 +435,7 @@ export default function Dashboard() {
               const shownItems = gearTab === "bike" ? bikeItems : shoeItems;
               return (
                 <div className="panel">
-                  <h2>Equipment Lifecycle &amp; Telemetry</h2>
+                  <h2>Gears Check</h2>
                   <div className="hint" style={{ marginTop: 6, marginBottom: 4 }}>
                     Wear estimated from Strava&rsquo;s own gear mileage — shoe foam compression scaled to your body
                     weight if you&rsquo;ve added it, bike chain wear from typical drivetrain mileage.
@@ -498,7 +498,7 @@ export default function Dashboard() {
 
             {equipment && equipment.items.length === 0 && (
               <div className="panel">
-                <h2>Equipment Lifecycle &amp; Telemetry</h2>
+                <h2>Gears Check</h2>
                 <div className="hint" style={{ marginTop: 6 }}>
                   No gear retrieved from your Strava profile yet — add shoes or a bike to your
                   activities in Strava, then use Re-sync from Strava in the menu to start tracking wear.

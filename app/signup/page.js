@@ -120,10 +120,10 @@ export default function SignupPage() {
     return (
       <div className="shell narrow">
         <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
-          <div className="wordmark">
+          <Link href="/" className="wordmark">
             <img src="/logo.png" alt="" width={26} height={26} />
             <span className="split">SPLIT</span><span className="line">LINE</span>
-          </div>
+          </Link>
           <ThemeToggle />
         </div>
         <div className="panel">
@@ -159,10 +159,10 @@ export default function SignupPage() {
   return (
     <div className="shell narrow">
       <div className="top" style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 28 }}>
-        <div className="wordmark">
+        <Link href="/" className="wordmark">
           <img src="/logo.png" alt="" width={26} height={26} />
           <span className="split">SPLIT</span><span className="line">LINE</span>
-        </div>
+        </Link>
         <ThemeToggle />
       </div>
       <div className="panel">

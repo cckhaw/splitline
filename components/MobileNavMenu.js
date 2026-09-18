@@ -20,6 +20,9 @@ export default function MobileNavMenu({ onNavigate }) {
       <Link href="/app" className={`user-menu-item${pathname === "/app" ? " active" : ""}`} onClick={onNavigate}>
         Dashboard
       </Link>
+      <Link href="/activities" className={`user-menu-item${pathname === "/activities" ? " active" : ""}`} onClick={onNavigate}>
+        Last 30 Activities
+      </Link>
       <div
         className={`user-menu-item mobile-nav-trigger${trainingActive ? " active" : ""}`}
         onClick={() => setTrainingOpen((o) => !o)}
