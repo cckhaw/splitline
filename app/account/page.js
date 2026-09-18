@@ -53,6 +53,12 @@ export default function AccountPage() {
   const [avatarStatus, setAvatarStatus] = useState("");
   const fileInputRef = useRef(null);
 
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleteEmail, setDeleteEmail] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [deleteStatus, setDeleteStatus] = useState("");
+  const [deleting, setDeleting] = useState(false);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     if (params.get("prompt") === "birthdate") {
@@ -275,6 +281,25 @@ export default function AccountPage() {
     }
   }
 
+  async function deleteAccount(e) {
+    e.preventDefault();
+    setDeleting(true);
+    setDeleteStatus("");
+    try {
+      const res = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ password: deletePassword, confirmEmail: deleteEmail }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Couldn't delete your account.");
+      window.location.href = "/login?deleted=1";
+    } catch (e) {
+      setDeleteStatus(e.message);
+      setDeleting(false);
+    }
+  }
+
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
   return (
@@ -480,6 +505,47 @@ export default function AccountPage() {
           </button>
         </form>
       </div>
+
+      <div className="panel" style={{ borderColor: "var(--coral)" }}>
+        <h2 style={{ color: "var(--coral)" }}>Danger zone</h2>
+        {!confirmingDelete ? (
+          <>
+            <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>
+              Permanently delete your Splitline account and all imported data.
+            </div>
+            <button type="button" style={{ borderColor: "var(--coral)", color: "var(--coral)" }} onClick={() => setConfirmingDelete(true)}>
+              Delete my account
+            </button>
+          </>
+        ) : (
+          <form onSubmit={deleteAccount}>
+            <div className="status-line warn" style={{ marginTop: 0 }}>
+              This cannot be undone. Deleting your account immediately and permanently erases your profile,
+              every imported Strava activity, gear records, training and race-day plans, and any cached AI
+              insights — none of it can be recovered. You&rsquo;ll need to sign up for a brand new account to
+              use Splitline again.
+            </div>
+            <label>Type your email ({me.email}) to confirm</label>
+            <input type="email" required value={deleteEmail} onChange={(e) => setDeleteEmail(e.target.value)} />
+            <label>Current password{me.hasGoogleLogin ? " (leave blank if you only sign in with Google)" : ""}</label>
+            <input type="password" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} />
+            {deleteStatus && <div className="status-line warn">{deleteStatus}</div>}
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button
+                type="submit"
+                disabled={deleting || deleteEmail.toLowerCase() !== me.email.toLowerCase()}
+                style={{ background: "var(--coral)", borderColor: "var(--coral)", color: "#fff" }}
+              >
+                {deleting ? "Deleting…" : "Permanently delete my account"}
+              </button>
+              <button type="button" onClick={() => { setConfirmingDelete(false); setDeleteStatus(""); setDeleteEmail(""); setDeletePassword(""); }}>
+                Cancel
+              </button>
+            </div>
+          </form>
+        )}
+      </div>
+
       <SiteFooter />
     </div>
   );

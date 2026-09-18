@@ -11,6 +11,14 @@ export async function GET(request) {
 
   try {
     const user = await getUserById(session.userId);
+    // A session token stays valid (not expired) independently of the
+    // account it points to — deleting the account (see
+    // /api/account/delete) doesn't revoke tokens still floating around
+    // elsewhere (another tab, another device). Every protected page's
+    // auth check goes through this endpoint, so treating a missing user
+    // as logged-out here is what actually kicks a stale session to /login.
+    if (!user) return NextResponse.json({ authenticated: false });
+
     const connection = await getStravaConnection(session.userId);
     const activityCount = await countActivitiesForUser(session.userId);
 
