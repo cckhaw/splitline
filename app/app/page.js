@@ -232,6 +232,64 @@ export default function Dashboard() {
         </div>
       )}
 
+      {activities.length === 0 && (
+        <div className="panel">
+          <h2>Getting started guide</h2>
+          <div className="hint" style={{ marginTop: -8, marginBottom: 4 }}>
+            Once you connect Strava and sync your last 30 activities, here&rsquo;s everything Splitline
+            builds for you from that data:
+          </div>
+          <div className="guide-grid">
+            <div className="guide-card">
+              <h4><span className="guide-card-icon">📊</span> Telemetry overlay cards</h4>
+              <p>
+                Every imported activity becomes its own pace/power/heart-rate card, styled like a
+                cockpit readout — save it as an image or post it straight to your Strava feed.
+              </p>
+            </div>
+            <div className="guide-card">
+              <h4><span className="guide-card-icon">⏱️</span> Training load &amp; race pace prediction</h4>
+              <p>
+                See your acute:chronic training load at a glance and get 5K, 10K, half-marathon, and
+                marathon time projections from your recent efforts.
+              </p>
+            </div>
+            <div className="guide-card">
+              <h4><span className="guide-card-icon">🛡️</span> Injury-risk &amp; overtraining shield</h4>
+              <p>
+                Aerobic decoupling, cadence drift, and workload ramp feed an AI-read risk score, plus a
+                recovery plan and nutrition guidance — so overtraining shows up before an injury does.
+              </p>
+            </div>
+            <div className="guide-card">
+              <h4><span className="guide-card-icon">👟</span> Gears check</h4>
+              <p>
+                Splitline tracks accumulated mileage on your registered shoes and bikes and estimates
+                wear percentage, so you replace gear before it fails on you mid-workout.
+              </p>
+            </div>
+            <div className="guide-card">
+              <h4><span className="guide-card-icon">📅</span> AI progressive training plan</h4>
+              <p>
+                Set an upcoming race and get a phase-by-phase plan — base, build, taper — with weekly
+                volume guidance, key workouts, recovery, and nutrition tailored to that goal.
+              </p>
+            </div>
+            <div className="guide-card">
+              <h4><span className="guide-card-icon">🏁</span> Race-day pacing &amp; fueling plan</h4>
+              <p>
+                Enter your race-day conditions and get a segment-by-segment pacing strategy, fueling
+                plan, and contingencies grounded in your own training history.
+              </p>
+            </div>
+          </div>
+          <div className="hint" style={{ marginTop: 14 }}>
+            Every AI-generated panel can also be shared as a professionally formatted PDF or PNG, with
+            a Splitline-branded layout and QR code back to the site.
+          </div>
+        </div>
+      )}
+
       {me.stravaConnected && activities.length === 0 && !importing && (
         <div className="panel">
           <h2>Import your activities</h2>

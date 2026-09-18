@@ -3,9 +3,8 @@ import ThemeToggle from "@/components/ThemeToggle";
 import SiteFooter from "@/components/SiteFooter";
 import { CONTACT_EMAIL } from "@/lib/contact";
 
-export const metadata = {
-  title: "Terms of Service — Splitline",
-};
+// No page-specific metadata — title and description are standardized
+// site-wide from the root layout (app/layout.js).
 
 export default function TermsPage() {
   return (
