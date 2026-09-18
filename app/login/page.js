@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import ThemeToggle from "@/components/ThemeToggle";
+import SiteFooter from "@/components/SiteFooter";
 
 const ERROR_MESSAGES = {
   google_not_configured: "Google sign-in isn't set up on this deployment yet.",
@@ -96,6 +97,7 @@ export default function LoginPage() {
           New here? <Link href="/signup">Sign up free</Link>
         </div>
       </div>
+      <SiteFooter />
     </div>
   );
 }

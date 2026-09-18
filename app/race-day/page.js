@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import SiteFooter from "@/components/SiteFooter";
 
 // A response can come back with an empty or non-JSON body — a platform
 // timeout truncating a slow AI call, a proxy error page, a crashed
@@ -256,6 +257,7 @@ export default function RaceDayPage() {
           )}
         </>
       )}
+      <SiteFooter />
     </div>
   );
 }

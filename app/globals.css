@@ -207,7 +207,32 @@ input::placeholder { color: var(--ink-dim); }
 @media (max-width: 860px) { .features { grid-template-columns: 1fr; } .hero h1 { font-size: calc(30px * var(--fs-scale, 1)); } }
 .feature h3 { font-size: calc(16px * var(--fs-scale, 1)); font-weight: 500; margin: 0 0 8px; color: var(--ink); }
 .feature p { font-size: calc(13.5px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.6; margin: 0; }
-.foot { display: flex; justify-content: space-between; font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 20px; }
+.foot {
+  display: flex; justify-content: space-between; align-items: baseline; flex-wrap: wrap; gap: 8px 20px;
+  font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); border-top: 1px solid var(--line);
+  padding-top: 20px; margin-top: 28px;
+}
+.foot-links { display: flex; gap: 16px; }
+.foot-links a { color: var(--ink-dim); text-decoration: none; }
+.foot-links a:hover { color: var(--ink); text-decoration: underline; }
+
+/* privacy / terms pages */
+.legal-content { max-width: 760px; }
+.legal-content h1 { font-size: calc(28px * var(--fs-scale, 1)); font-weight: 700; color: var(--ink); margin: 0 0 6px; }
+.legal-updated { color: var(--ink-dim); font-size: calc(12.5px * var(--fs-scale, 1)); margin: 0 0 28px; }
+.legal-content h2 {
+  font-size: calc(18px * var(--fs-scale, 1)); font-weight: 700; color: var(--ink);
+  text-transform: none; letter-spacing: 0; margin: 32px 0 10px;
+}
+.legal-content h2:first-of-type { margin-top: 0; }
+.legal-content h3 {
+  font-size: calc(14px * var(--fs-scale, 1)); font-weight: 600; color: var(--ink);
+  text-transform: none; letter-spacing: 0; margin: 18px 0 6px;
+}
+.legal-content p, .legal-content li { font-size: calc(14px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.65; margin: 0 0 12px; }
+.legal-content strong { color: var(--ink); }
+.legal-content ul { margin: 0 0 16px; padding-left: 22px; }
+.legal-content a { color: var(--brand-2); }
 
 .beta-banner {
   display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;

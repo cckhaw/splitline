@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import TelemetryPanel from "@/components/TelemetryPanel";
+import SiteFooter from "@/components/SiteFooter";
 
 const ERROR_MESSAGES = {
   state_mismatch: "That connection attempt looked tampered with — try connecting again.",
@@ -394,7 +395,7 @@ export default function Dashboard() {
             )}
 
             <div className="panel">
-              <h2 style={{ margin: 0 }}>Telemetry overlays</h2>
+              <h2 style={{ margin: 0 }}>Strava Summary</h2>
               <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
                 One infographic for your last {activities.length} activities — total training time across the
                 period, a fatigue read on how recently and how hard you've been training, and an intensity trend
@@ -505,6 +506,7 @@ export default function Dashboard() {
           </div>
         </div>
       )}
+      <SiteFooter />
     </div>
   );
 }

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
 import Avatar from "@/components/Avatar";
 import AvatarCropper from "@/components/AvatarCropper";
+import SiteFooter from "@/components/SiteFooter";
 import { PLANS, formatUsd } from "@/lib/pricing";
 import { TIERS } from "@/lib/membership";
 
@@ -479,6 +480,7 @@ export default function AccountPage() {
           </button>
         </form>
       </div>
+      <SiteFooter />
     </div>
   );
 }

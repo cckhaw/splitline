@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import AppHeader from "@/components/AppHeader";
+import SiteFooter from "@/components/SiteFooter";
 import { EVENT_TYPES, DISTANCE_OPTIONS, GOAL_TIME_OPTIONS } from "@/lib/eventTypes";
 import { buildProgressChartSvg } from "@/lib/progressChart";
 import { resolveTheme } from "@/lib/theme";
@@ -306,6 +307,7 @@ export default function TrainingPlanPage() {
           </div>
         </>
       )}
+      <SiteFooter />
     </div>
   );
 }

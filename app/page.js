@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
+import SiteFooter from "@/components/SiteFooter";
 import { PLANS, formatUsd } from "@/lib/pricing";
 import { TIERS, BETA_PRO_TRIAL_DAYS } from "@/lib/membership";
 
@@ -112,10 +113,7 @@ export default function Home() {
         </div>
       </section>
 
-      <footer className="foot">
-        <span>Splitline</span>
-        <span>Built on Strava&rsquo;s API. Not affiliated with or endorsed by Strava.</span>
-      </footer>
+      <SiteFooter />
     </div>
   );
 }
