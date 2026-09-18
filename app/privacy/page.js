@@ -120,12 +120,12 @@ export default function PrivacyPage() {
           </p>
           <p>
             <strong>Access &amp; export.</strong> Email{" "}
-            <a href="mailto:legal@splitline.ai">legal@splitline.ai</a> to request a copy of the personal data we
+            <a href="mailto:splitline@khaw.cc">splitline@khaw.cc</a> to request a copy of the personal data we
             hold about you.
           </p>
           <p>
             <strong>Account &amp; data deletion.</strong> Email{" "}
-            <a href="mailto:legal@splitline.ai">legal@splitline.ai</a> to request deletion — this permanently
+            <a href="mailto:splitline@khaw.cc">splitline@khaw.cc</a> to request deletion — this permanently
             removes your account, imported activities, gear records, and any cached AI-generated insights from
             our database.
           </p>
@@ -150,7 +150,7 @@ export default function PrivacyPage() {
 
           <h2>9. Contact</h2>
           <p>
-            Questions about this policy or your data: <a href="mailto:legal@splitline.ai">legal@splitline.ai</a>.
+            Questions about this policy or your data: <a href="mailto:splitline@khaw.cc">splitline@khaw.cc</a>.
           </p>
         </div>
       </div>

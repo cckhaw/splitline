@@ -103,7 +103,7 @@ export default function TermsPage() {
           <h2>10. Contact Information</h2>
           <p>
             For privacy inquiries, legal notices, or data deletion requests, please contact:{" "}
-            <a href="mailto:legal@splitline.ai">legal@splitline.ai</a>.
+            <a href="mailto:splitline@khaw.cc">splitline@khaw.cc</a>.
           </p>
         </div>
       </div>
