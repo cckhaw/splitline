@@ -22,6 +22,7 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
   const [resetDone, setResetDone] = useState(false);
+  const [accountDeleted, setAccountDeleted] = useState(false);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -32,6 +33,10 @@ export default function LoginPage() {
     }
     if (params.get("reset") === "1") {
       setResetDone(true);
+      window.history.replaceState({}, "", "/login");
+    }
+    if (params.get("deleted") === "1") {
+      setAccountDeleted(true);
       window.history.replaceState({}, "", "/login");
     }
   }, []);
@@ -79,6 +84,7 @@ export default function LoginPage() {
       <div className="panel">
         <h2>Log in</h2>
         {resetDone && <div className="status-line" style={{ marginBottom: 14 }}>Your password has been reset — log in with your new one.</div>}
+        {accountDeleted && <div className="status-line" style={{ marginBottom: 14 }}>Your account and all data have been permanently deleted. Sign up again any time.</div>}
         <a href="/api/auth/google">
           <button type="button" style={{ marginBottom: 16 }}>Continue with Google</button>
         </a>
