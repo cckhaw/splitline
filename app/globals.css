@@ -326,13 +326,6 @@ input::placeholder { color: var(--ink-dim); }
 .legal-content ul { margin: 0 0 16px; padding-left: 22px; }
 .legal-content a { color: var(--brand-2); }
 
-.beta-banner {
-  display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
-  background: color-mix(in srgb, var(--brand) 10%, transparent); border: 1px solid var(--brand); border-radius: var(--radius);
-  padding: 16px 20px; margin: 0 0 32px;
-}
-.beta-banner span { font-size: calc(14px * var(--fs-scale, 1)); color: var(--ink); line-height: 1.5; }
-
 .pricing { padding: 20px 0 60px; border-top: 1px solid var(--line); margin-top: 20px; }
 .pricing-heading { font-size: calc(28px * var(--fs-scale, 1)); font-weight: 700; text-align: center; margin: 0 0 28px; color: var(--ink); }
 .pricing-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
