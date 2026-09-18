@@ -55,7 +55,7 @@ export default function TrainingPlanPage() {
   const [formError, setFormError] = useState("");
   const [saving, setSaving] = useState(false);
   const [changingEvent, setChangingEvent] = useState(false);
-  const [theme, setTheme] = useState("dark");
+  const [theme, setTheme] = useState("light");
 
   useEffect(() => {
     fetch("/api/me").then((r) => r.json()).then((data) => {
@@ -67,7 +67,7 @@ export default function TrainingPlanPage() {
   }, [router]);
 
   useEffect(() => {
-    const readTheme = () => setTheme(document.documentElement.getAttribute("data-theme") || "dark");
+    const readTheme = () => setTheme(document.documentElement.getAttribute("data-theme") || "light");
     readTheme();
     // Keeps the chart's colors in sync if the theme is toggled while this page is open.
     const observer = new MutationObserver(readTheme);
@@ -250,7 +250,7 @@ export default function TrainingPlanPage() {
                   dangerouslySetInnerHTML={{
                     __html: buildProgressChartSvg(
                       plan.phases,
-                      { bg: resolveTheme(theme).bg, ink: resolveTheme(theme).ink, inkDim: resolveTheme(theme).inkDim, accent: resolveTheme(theme).amber, line: resolveTheme(theme).line },
+                      { bg: resolveTheme(theme).bg, ink: resolveTheme(theme).ink, inkDim: resolveTheme(theme).inkDim, accent: resolveTheme(theme).brand, line: resolveTheme(theme).line },
                       { width: 900, height: 260 }
                     ),
                   }}

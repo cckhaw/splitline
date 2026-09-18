@@ -11,12 +11,13 @@ export async function GET(request) {
 
   try {
     const [gear, user] = await Promise.all([getGearForUser(session.userId), getUserById(session.userId)]);
-    // Retired gear (marked as such by the athlete on Strava) isn't
-    // something they're still using, so it doesn't belong in a "what
-    // needs replacing" list.
-    const items = evaluateAllGear(gear.filter((g) => !g.retired), user?.weight_kg).map((item) => ({
+    // Every piece of gear Strava returned for this athlete, shoes and
+    // bikes alike — retired items are included (flagged via item.status
+    // === "retired") since they're still part of "all gear retrieved",
+    // just not something to suggest shopping for a replacement.
+    const items = evaluateAllGear(gear, user?.weight_kg).map((item) => ({
       ...item,
-      shopUrl: item.status === "healthy" ? null : shopSearchUrl(item),
+      shopUrl: item.status === "healthy" || item.status === "retired" ? null : shopSearchUrl(item),
     }));
     return NextResponse.json({ items, weightOnFile: Boolean(user?.weight_kg) });
   } catch (e) {

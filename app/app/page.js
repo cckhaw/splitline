@@ -30,6 +30,7 @@ export default function Dashboard() {
   const [insights, setInsights] = useState(null);
   const [refreshingAi, setRefreshingAi] = useState(false);
   const [equipment, setEquipment] = useState(null);
+  const [gearTab, setGearTab] = useState("shoe");
 
   const [theme, setTheme] = useState("ink");
   const [units, setUnits] = useState("metric");
@@ -422,51 +423,78 @@ export default function Dashboard() {
           </div>
 
           <div className="dashboard-side">
-            {equipment && equipment.items.length > 0 && (
-              <div className="panel">
-                <h2>Equipment Lifecycle &amp; Telemetry</h2>
-                <div className="hint" style={{ marginTop: 6, marginBottom: 4 }}>
-                  Wear estimated from Strava&rsquo;s own gear mileage — shoe foam compression scaled to your body
-                  weight if you&rsquo;ve added it, bike chain wear from typical drivetrain mileage.
-                  {!equipment.weightOnFile && (
-                    <> <a href="/account">Add your weight</a> for a sharper shoe estimate.</>
+            {equipment && equipment.items.length > 0 && (() => {
+              const shoeItems = equipment.items.filter((i) => i.gearType !== "bike");
+              const bikeItems = equipment.items.filter((i) => i.gearType === "bike");
+              const shownItems = gearTab === "bike" ? bikeItems : shoeItems;
+              return (
+                <div className="panel">
+                  <h2>Equipment Lifecycle &amp; Telemetry</h2>
+                  <div className="hint" style={{ marginTop: 6, marginBottom: 4 }}>
+                    Wear estimated from Strava&rsquo;s own gear mileage — shoe foam compression scaled to your body
+                    weight if you&rsquo;ve added it, bike chain wear from typical drivetrain mileage.
+                    {!equipment.weightOnFile && (
+                      <> <a href="/account">Add your weight</a> for a sharper shoe estimate.</>
+                    )}
+                  </div>
+                  <div className="equipment-tabs">
+                    <button
+                      type="button"
+                      className={`equipment-tab${gearTab === "shoe" ? " active" : ""}`}
+                      onClick={() => setGearTab("shoe")}
+                    >
+                      Shoes ({shoeItems.length})
+                    </button>
+                    <button
+                      type="button"
+                      className={`equipment-tab${gearTab === "bike" ? " active" : ""}`}
+                      onClick={() => setGearTab("bike")}
+                    >
+                      Bikes ({bikeItems.length})
+                    </button>
+                  </div>
+                  {shownItems.length === 0 ? (
+                    <div className="hint" style={{ marginTop: 10 }}>
+                      No {gearTab === "bike" ? "bikes" : "shoes"} retrieved from your Strava profile yet.
+                    </div>
+                  ) : (
+                    <div className="equipment-list equipment-list-scroll">
+                      {shownItems.map((item) => (
+                        <div key={item.id} className="equipment-item">
+                          <div className="equipment-item-head">
+                            <span>{item.name || (item.gearType === "bike" ? "Bike" : "Shoes")}</span>
+                            <span className={`equipment-status equipment-status-${item.status}`}>
+                              {item.status === "replace" ? "Replace soon" : item.status === "watch" ? "Nearing replacement" : item.status === "retired" ? "Retired" : "Healthy"}
+                            </span>
+                          </div>
+                          <div className="progress-track">
+                            <div
+                              className={`progress-fill${item.status !== "healthy" && item.status !== "retired" ? " progress-fill-warn" : ""}`}
+                              style={{ width: `${Math.min(100, item.percentUsed)}%` }}
+                            />
+                          </div>
+                          <div className="hint" style={{ marginTop: 4 }}>
+                            {item.distanceKm}km of an estimated {item.thresholdKm}km ({item.percentUsed}%)
+                          </div>
+                          <div className="hint" style={{ marginTop: 6, color: "var(--ink)" }}>{item.recommendation}</div>
+                          {item.shopUrl && (
+                            <a href={item.shopUrl} target="_blank" rel="noreferrer" style={{ fontSize: "calc(12.5px * var(--fs-scale, 1))" }}>
+                              Shop replacement options →
+                            </a>
+                          )}
+                        </div>
+                      ))}
+                    </div>
                   )}
                 </div>
-                <div className="equipment-list equipment-list-scroll">
-                  {equipment.items.map((item) => (
-                    <div key={item.id} className="equipment-item">
-                      <div className="equipment-item-head">
-                        <span>{item.name || (item.gearType === "bike" ? "Bike" : "Shoes")}</span>
-                        <span className={`equipment-status equipment-status-${item.status}`}>
-                          {item.status === "replace" ? "Replace soon" : item.status === "watch" ? "Nearing replacement" : "Healthy"}
-                        </span>
-                      </div>
-                      <div className="progress-track">
-                        <div
-                          className={`progress-fill${item.status !== "healthy" ? " progress-fill-warn" : ""}`}
-                          style={{ width: `${Math.min(100, item.percentUsed)}%` }}
-                        />
-                      </div>
-                      <div className="hint" style={{ marginTop: 4 }}>
-                        {item.distanceKm}km of an estimated {item.thresholdKm}km ({item.percentUsed}%)
-                      </div>
-                      <div className="hint" style={{ marginTop: 6, color: "var(--ink)" }}>{item.recommendation}</div>
-                      {item.shopUrl && (
-                        <a href={item.shopUrl} target="_blank" rel="noreferrer" style={{ fontSize: "calc(12.5px * var(--fs-scale, 1))" }}>
-                          Shop replacement options →
-                        </a>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
+              );
+            })()}
 
             {equipment && equipment.items.length === 0 && (
               <div className="panel">
                 <h2>Equipment Lifecycle &amp; Telemetry</h2>
                 <div className="hint" style={{ marginTop: 6 }}>
-                  No unretired gear tagged on your imported activities yet — add shoes or a bike to your
+                  No gear retrieved from your Strava profile yet — add shoes or a bike to your
                   activities in Strava, then hit Re-sync above to start tracking wear.
                 </div>
               </div>
