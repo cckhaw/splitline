@@ -512,5 +512,12 @@ h3 { font-size: calc(12.5px * var(--fs-scale, 1)); font-weight: 500; color: var(
 .phase-card ul { margin: 8px 0 0; padding-left: 18px; font-size: calc(13px * var(--fs-scale, 1)); color: var(--ink); line-height: 1.6; }
 .phase-card li { margin-bottom: 4px; }
 
+.phase-deviation-notes { border-top: 1px solid var(--line); margin-top: 10px; padding-top: 8px; }
+.phase-deviation-notes ul { font-size: calc(12.5px * var(--fs-scale, 1)); line-height: 1.6; }
+.deviation-week-missed { color: var(--coral); }
+.deviation-week-exceeded { color: var(--amber); }
+.deviation-week-on_track { color: var(--ink-dim); }
+.deviation-week-insufficient_data { color: var(--ink-dim); }
+
 .progress-chart { margin: 16px 0 24px; }
 .progress-chart svg { width: 100%; height: auto; display: block; }

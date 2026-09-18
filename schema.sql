@@ -102,6 +102,28 @@ CREATE TABLE IF NOT EXISTS training_plans (
   generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Cached AI comparison of an athlete's actual training since their
+-- current plan was generated against that plan's phase-level targets —
+-- the basis for the dashboard's training-plan deviation alert. Keyed by
+-- a hash of the plan's own input_hash plus the weekly actuals since it
+-- started, so it only recomputes when there's something new to compare
+-- (same anti-gaming approach as ai_insights/training_plans above).
+-- `status` tracks what the athlete decided once shown a significant
+-- deviation ('pending' | 'acknowledged'); the Training Plan page marks
+-- up individual weeks from `payload`'s weekly_review once status is
+-- 'acknowledged' (continuing with the plan as-is). lib/db.js's
+-- saveTrainingPlan() deletes this row whenever the plan itself is
+-- replaced — a new plan needs a fresh baseline to compare against.
+CREATE TABLE IF NOT EXISTS training_plan_deviations (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  plan_input_hash TEXT NOT NULL,
+  input_hash TEXT NOT NULL,
+  payload JSONB NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending',
+  generated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  decided_at TIMESTAMPTZ
+);
+
 -- Cached AI-generated race-day pacing/fueling plan for the current goal
 -- (race_goals above) plus this feature's own race-day inputs (expected
 -- temperature/humidity, course elevation gain) — keyed by a hash of all

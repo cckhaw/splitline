@@ -228,14 +228,10 @@ now captured on import (`activities.avg_temp_c`) and averaged into a
 "Avg recorded temp" tile when enough activities have it. This is
 explicitly not live weather and the UI doesn't claim otherwise.
 
-## Biomechanical & Overtraining Shield — and a real limitation on "age from Strava"
+## Overtraining Shield — and a real limitation on "age from Strava"
 
-The dashboard's "Biomechanical & Overtraining Shield" panel is a
-**physics-model + LLM** hybrid, not an LLM guessing from raw numbers:
-
-## Biomechanical & Overtraining Shield — and a real limitation on "age from Strava"
-
-The dashboard's "Biomechanical & Overtraining Shield" panel is a
+The dashboard's "Overtraining Shield" panel (formerly "Biomechanical &
+Overtraining Shield" — renamed for brevity, same feature) is a
 **physics-model + LLM** hybrid, not an LLM guessing from raw numbers:
 
 - **Physics model** (`lib/biomechanics.js`, deterministic, no API
@@ -282,9 +278,11 @@ tradeoff for a feature described as "getting age from Strava" — that
 data point isn't available from Strava at all.
 
 Results are cached per user (`ai_insights` table) and only regenerated
-when the underlying activity summary actually changes, or when the
-dashboard's "Refresh AI analysis" button is clicked — the model isn't
-called on every page load.
+when the underlying activity summary actually changes — the model isn't
+called on every page load. There's no manual "Refresh" button; in
+practice this means a "Re-sync from Strava" is what refreshes the
+panel, since that's what changes the activity summary the input hash is
+computed from (subject to the same tier-based rate limit either way).
 
 ## Equipment Lifecycle & Telemetry
 
@@ -449,6 +447,48 @@ connection cutoff, and the client (`safeJson` in
 training-plan generation times out consistently despite that, the Hobby
 plan's 10-second cap is the first thing to check — the richer plan this
 version generates makes that more likely to bite, not less.
+
+### Comparing actual training against the plan
+
+Every "Re-sync from Strava" also checks whether actual training since
+the current plan was generated has drifted meaningfully from what the
+plan called for. `lib/trainingPlanDeviation.js` buckets the activities
+imported since the plan's `generated_at` into calendar weeks counted
+from that start date, and `/api/training-plan/deviation` hands those —
+plus the plan's own phases (guidance text, not rigid per-week numbers)
+and the athlete's training-load/biomechanics signals — to a dedicated
+Claude call, `generateTrainingPlanDeviation` in `lib/anthropic.js`.
+Unlike the injury and training-plan features, there's no strict formula
+for "10% off plan": the plan itself is expressed as guidance ranges, not
+fixed numeric weekly targets, so the model makes that judgment call
+directly, the same way it already judges risk level or training
+adjustments elsewhere in the app. It returns which of distance, pace,
+power, heart rate, or fatigue look off by roughly 10% or more and in
+which direction, a week-by-week status ("on track" / "missed" /
+"exceeded" / "insufficient data") matched back to the plan's own phase
+names, and a likelihood assessment of whether the drift, if it
+continues, would actually threaten the event goal.
+
+A significant deviation surfaces as an alert panel at the top of the
+dashboard with three choices: **regenerate** the plan from scratch,
+**adjust** the existing plan's upcoming phases around the deviation
+(`generateAdjustedTrainingPlan`, both sharing `generateTrainingPlan`'s
+output schema so either result caches and renders exactly like a normal
+plan), or **continue** with the current plan as-is. Choosing "continue"
+doesn't change the plan; it marks the deviation `acknowledged`
+(`training_plan_deviations` table), and the Training Plan page then
+annotates each affected phase with the specific weeks that were off and
+by how much, plus the persisted goal-impact analysis. This check shares
+the training-plan feature's own tier-based rate limit (`ai_usage`,
+feature `training_plan`) rather than getting a limit of its own —
+regenerating, adjusting, and the deviation check itself all draw from
+the same budget, consistent with how an auto-triggered plan
+regeneration already spends from it today; when the tier isn't eligible,
+the background check just silently skips rather than showing a locked
+state (it isn't a user-clicked action). A new plan — regenerated,
+adjusted, or simply because the goal changed — always clears any prior
+deviation record, since there's nothing meaningful left to compare
+against once the plan itself has changed.
 
 ## Membership tiers, display font size, and billing
 

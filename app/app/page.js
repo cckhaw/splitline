@@ -32,9 +32,12 @@ export default function Dashboard() {
   const [summaryData, setSummaryData] = useState(null);
   const [summarySaving, setSummarySaving] = useState(false);
   const [insights, setInsights] = useState(null);
-  const [refreshingAi, setRefreshingAi] = useState(false);
   const [equipment, setEquipment] = useState(null);
   const [gearTab, setGearTab] = useState("shoe");
+
+  const [deviation, setDeviation] = useState(null);
+  const [deviationActing, setDeviationActing] = useState(false);
+  const [deviationActionError, setDeviationActionError] = useState("");
 
   const [theme, setTheme] = useState("ink");
   const [units, setUnits] = useState("metric");
@@ -134,16 +137,48 @@ export default function Dashboard() {
     setInsights(insData);
     setEquipment(equipRes.ok ? await equipRes.json() : null);
     if ((actData.activities || []).length > 0) await loadSummaryData();
+    // Fire-and-forget: a background check, not something that should
+    // block the rest of the dashboard from rendering. Covers both "just
+    // re-synced" and "reopened the dashboard with an unactioned alert
+    // from before."
+    checkTrainingPlanDeviation();
   }
 
-  async function refreshAiInsights() {
-    setRefreshingAi(true);
+  async function checkTrainingPlanDeviation() {
     try {
-      const res = await fetch("/api/insights?refresh=1");
+      const res = await fetch("/api/training-plan/deviation");
+      if (!res.ok) return;
       const data = await res.json();
-      setInsights(data);
+      setDeviation(data.active && data.status === "pending" ? data : null);
+    } catch {
+      // Best-effort background check — silently skip on failure.
+    }
+  }
+
+  async function handleDeviationAction(action) {
+    setDeviationActing(true);
+    setDeviationActionError("");
+    try {
+      const res = await fetch("/api/training-plan/deviation", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(data.message || "Couldn't update your training plan.");
+      setDeviation(null);
+      setStatusWarn(false);
+      setStatus(
+        action === "continue"
+          ? "Continuing with your current plan — the deviation is now marked on your Training plan."
+          : action === "regenerate"
+          ? "Training plan regenerated from your latest training."
+          : "Training plan adjusted for the deviation."
+      );
+    } catch (e) {
+      setDeviationActionError(e.message);
     } finally {
-      setRefreshingAi(false);
+      setDeviationActing(false);
     }
   }
 
@@ -197,6 +232,48 @@ export default function Dashboard() {
   return (
     <div className="shell">
       <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} onResync={runImport} resyncing={importing} />
+
+      {deviation && (
+        <div className="panel" style={{ borderLeft: "4px solid var(--amber)", marginBottom: 18 }}>
+          <h2 style={{ margin: 0 }}>Training plan deviation detected</h2>
+          <div className="hint" style={{ color: "var(--ink)", marginTop: 8 }}>{deviation.narrative}</div>
+
+          {deviation.categories?.length > 0 && (
+            <ul style={{ margin: "10px 0 0", paddingLeft: 18 }}>
+              {deviation.categories.map((c, i) => (
+                <li key={i} style={{ marginBottom: 4 }}>
+                  <strong style={{ textTransform: "capitalize" }}>{c.category.replace("_", " ")}</strong>{" "}
+                  {c.direction === "under" ? "below" : "above"} plan by ~{c.deviation_pct}% — {c.description}
+                </li>
+              ))}
+            </ul>
+          )}
+
+          <div className="hint" style={{ marginTop: 10 }}>
+            <strong style={{ color: "var(--ink)" }}>Likelihood this affects your goal: {deviation.goal_impact_likelihood}.</strong>{" "}
+            {deviation.goal_impact_narrative}
+          </div>
+
+          {deviationActionError && <div className="status-line warn" style={{ marginTop: 10 }}>{deviationActionError}</div>}
+
+          <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+            <button className="primary" style={{ width: "auto", padding: "7px 14px" }} disabled={deviationActing} onClick={() => handleDeviationAction("regenerate")}>
+              {deviationActing ? "Working…" : "Regenerate training plan"}
+            </button>
+            <button style={{ width: "auto", padding: "7px 14px" }} disabled={deviationActing} onClick={() => handleDeviationAction("adjust")}>
+              Adjust existing plan
+            </button>
+            <button style={{ width: "auto", padding: "7px 14px" }} disabled={deviationActing} onClick={() => handleDeviationAction("continue")}>
+              Continue with current plan
+            </button>
+          </div>
+
+          <div className="hint" style={{ marginTop: 10 }}>
+            Generated by an AI model comparing your recent training against your saved plan — an estimate, not an
+            exact calculation. <Link href="/training-plan">Review the full training plan →</Link>
+          </div>
+        </div>
+      )}
 
       {status && <div className={`status-line${statusWarn ? " warn" : ""}`} style={{ marginBottom: 16 }}>{status}</div>}
 
@@ -343,18 +420,8 @@ export default function Dashboard() {
             {insights && (
               <div className="panel">
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", gap: 12 }}>
-                  <h2 style={{ margin: 0 }}>Biomechanical &amp; Overtraining Shield</h2>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    <ShareButton kind="biomechanical" payload={{ athleteName: me.name || me.email, insights }} />
-                    <button
-                      style={{ width: "auto", padding: "6px 12px" }}
-                      onClick={refreshAiInsights}
-                      disabled={refreshingAi || insights.aiLocked}
-                      title={insights.aiLocked ? "Refresh limit reached for your tier" : undefined}
-                    >
-                      {refreshingAi ? "Analyzing…" : "Refresh AI analysis"}
-                    </button>
-                  </div>
+                  <h2 style={{ margin: 0 }}>Overtraining Shield</h2>
+                  <ShareButton kind="biomechanical" payload={{ athleteName: me.name || me.email, insights }} />
                 </div>
                 <div className="hint" style={{ marginTop: 6 }}>
                   Physics-based signals computed from your own activity streams — aerobic decoupling, cadence drift,
