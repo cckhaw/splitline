@@ -186,3 +186,28 @@ CREATE TABLE IF NOT EXISTS usage_events (
 );
 CREATE INDEX IF NOT EXISTS idx_usage_events_user ON usage_events (user_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_usage_events_type ON usage_events (event_type, created_at DESC);
+
+-- A snapshot taken at the moment a user deletes their own account (see
+-- /api/account/delete), kept after the users row (and everything it
+-- cascades to) is gone — deliberately NOT a foreign key to users, since
+-- that row no longer exists by the time anyone reads this. This is the
+-- one piece of "erase everything" that's intentionally not erased: just
+-- enough to let the site operator reach out about why someone left.
+-- Disclosed to the user at deletion time and in the Privacy Policy —
+-- keep both in sync with whatever this table actually retains.
+CREATE TABLE IF NOT EXISTS deleted_users (
+  id SERIAL PRIMARY KEY,
+  original_user_id INTEGER,      -- the old users.id, for cross-referencing logs only
+  name TEXT,
+  email TEXT NOT NULL,
+  tier TEXT,                      -- effective membership tier at the moment of deletion
+  was_trial BOOLEAN NOT NULL DEFAULT false,
+  signed_up_at TIMESTAMPTZ,
+  activity_count INTEGER NOT NULL DEFAULT 0,
+  event_counts JSONB,              -- usage_events rollup {event_type: count} at deletion time
+  reason TEXT,                     -- optional free-text "why are you leaving" from the delete form
+  contacted_at TIMESTAMPTZ,        -- admin marks this once they've reached out
+  admin_notes TEXT,
+  deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS idx_deleted_users_deleted_at ON deleted_users (deleted_at DESC);

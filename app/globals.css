@@ -148,7 +148,7 @@ label {
 }
 label:first-of-type { margin-top: 0; }
 
-input, select {
+input, select, textarea {
   display: block;
   width: 100%;
   font-family: var(--font-head);
@@ -159,11 +159,12 @@ input, select {
   border-radius: var(--radius);
   color: var(--ink);
 }
-input:focus, select:focus {
+textarea { resize: vertical; }
+input:focus, select:focus, textarea:focus {
   outline: none;
   border-color: var(--brand);
 }
-input::placeholder { color: var(--ink-dim); }
+input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 
 .status-line { font-size: calc(12.5px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.5; margin-top: 10px; }
 .status-line.warn { color: var(--coral); }

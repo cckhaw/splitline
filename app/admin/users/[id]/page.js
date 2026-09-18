@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import AdminBarList from "@/components/AdminBarList";
 import { eventLabel } from "@/lib/adminEvents";
+import { TIERS } from "@/lib/membership";
 
 function fmtDate(d) {
   return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
@@ -19,6 +20,12 @@ export default function AdminUserDetailPage() {
   const [ready, setReady] = useState(false);
   const [data, setData] = useState(null);
   const [error, setError] = useState("");
+
+  const [tierField, setTierField] = useState("free");
+  const [expiresAtField, setExpiresAtField] = useState("");
+  const [tierSaving, setTierSaving] = useState(false);
+  const [tierStatus, setTierStatus] = useState("");
+  const [tierWarn, setTierWarn] = useState(false);
 
   useEffect(() => {
     fetch("/api/admin/me").then((r) => r.json()).then((me) => {
@@ -35,8 +42,33 @@ export default function AdminUserDetailPage() {
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message || "Couldn't load that user.");
       setData(body);
+      setTierField(body.user.rawTier || "free");
+      setExpiresAtField(body.user.tierExpiresAt ? String(body.user.tierExpiresAt).slice(0, 10) : "");
     } catch (e) {
       setError(e.message);
+    }
+  }
+
+  async function saveTier(e) {
+    e.preventDefault();
+    setTierSaving(true);
+    setTierWarn(false);
+    setTierStatus("");
+    try {
+      const res = await fetch(`/api/admin/users/${params.id}/tier`, {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ tier: tierField, tierExpiresAt: expiresAtField || null }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message || "Couldn't update that tier.");
+      setTierStatus("Membership updated.");
+      await load();
+    } catch (e) {
+      setTierWarn(true);
+      setTierStatus(e.message);
+    } finally {
+      setTierSaving(false);
     }
   }
 
@@ -61,6 +93,27 @@ export default function AdminUserDetailPage() {
               {data.user.email} · <span className={`admin-tier-badge ${data.user.tier}`}>{data.user.tier}</span>
               {data.user.isTrial ? " (trial)" : ""} · Joined {fmtDate(data.user.createdAt)} · {data.user.activityCount} activities imported
             </div>
+          </div>
+
+          <div className="panel">
+            <h2>Membership</h2>
+            <div className="hint" style={{ marginTop: -8, marginBottom: 12 }}>
+              Overrides the tier directly — separate from Stripe, so an existing paid subscription (if any)
+              keeps billing on its own schedule regardless of what this is set to.
+              {data.user.hasStripeCustomer && " This user has a Stripe subscription on file."}
+            </div>
+            <form onSubmit={saveTier}>
+              <label>Tier</label>
+              <select value={tierField} onChange={(e) => setTierField(e.target.value)}>
+                {Object.values(TIERS).map((t) => <option key={t.key} value={t.key}>{t.label}</option>)}
+              </select>
+              <label>Expires on (leave blank for no expiry)</label>
+              <input type="date" value={expiresAtField} onChange={(e) => setExpiresAtField(e.target.value)} />
+              {tierStatus && <div className={`status-line${tierWarn ? " warn" : ""}`}>{tierStatus}</div>}
+              <button className="primary" type="submit" disabled={tierSaving} style={{ marginTop: 12 }}>
+                {tierSaving ? "Saving…" : "Update membership"}
+              </button>
+            </form>
           </div>
 
           <div className="panel">

@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAdminSession } from "@/lib/adminGuard";
-import { adminListUsers, adminEventTypeTotals, adminDeviceBrowserSplit, friendlyDbErrorMessage } from "@/lib/db";
+import { adminListUsers, adminEventTypeTotals, adminDeviceBrowserSplit, adminListDeletedUsers, friendlyDbErrorMessage } from "@/lib/db";
 import { resolveEffectiveTier, isTrialTier, TIERS } from "@/lib/membership";
 
 export const runtime = "nodejs";
@@ -10,10 +10,11 @@ export async function GET(request) {
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
   try {
-    const [users, eventTotals, deviceRows] = await Promise.all([
+    const [users, eventTotals, deviceRows, deletedUsers] = await Promise.all([
       adminListUsers(),
       adminEventTypeTotals(),
       adminDeviceBrowserSplit(),
+      adminListDeletedUsers(),
     ]);
 
     const tierBreakdown = Object.fromEntries(Object.keys(TIERS).map((k) => [k, 0]));
@@ -39,6 +40,8 @@ export async function GET(request) {
       deviceBreakdown,
       browserBreakdown,
       sampledUsers: deviceRows.length,
+      deletedUserCount: deletedUsers.length,
+      uncontactedDeletedUserCount: deletedUsers.filter((r) => !r.contacted_at).length,
     });
   } catch (e) {
     console.error("Admin overview query failed:", e);

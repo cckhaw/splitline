@@ -1,16 +1,21 @@
 import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { getSessionUser } from "@/lib/authGuard";
-import { getUserById, getUserByEmail, deleteUser, friendlyDbErrorMessage } from "@/lib/db";
+import {
+  getUserById, getUserByEmail, deleteUser, recordDeletedUser, adminUserEventCounts, countActivitiesForUser, friendlyDbErrorMessage,
+} from "@/lib/db";
 import { SESSION_COOKIE } from "@/lib/session";
+import { resolveEffectiveTier, isTrialTier } from "@/lib/membership";
 
 export const runtime = "nodejs";
+
+const MAX_REASON_LENGTH = 2000;
 
 export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const { password, confirmEmail } = await request.json().catch(() => ({}));
+  const { password, confirmEmail, reason } = await request.json().catch(() => ({}));
 
   try {
     const user = await getUserById(session.userId);
@@ -40,6 +45,31 @@ export async function POST(request) {
       } catch (e) {
         console.error("Failed to cancel Stripe subscription during account deletion (continuing):", e);
       }
+    }
+
+    // Snapshot just enough to let the site operator reach out about why
+    // someone left — disclosed at delete time and in the Privacy Policy.
+    // Taken right before the erase, from data that's about to be gone.
+    try {
+      const [eventCountRows, activityCount] = await Promise.all([
+        adminUserEventCounts(session.userId),
+        countActivitiesForUser(session.userId),
+      ]);
+      await recordDeletedUser({
+        originalUserId: user.id,
+        name: user.name,
+        email: user.email,
+        tier: resolveEffectiveTier(user),
+        wasTrial: isTrialTier(user),
+        signedUpAt: user.created_at,
+        activityCount,
+        eventCounts: Object.fromEntries(eventCountRows.map((r) => [r.event_type, r.n])),
+        reason: reason ? String(reason).slice(0, MAX_REASON_LENGTH) : null,
+      });
+    } catch (e) {
+      // Never let a snapshot failure block someone from actually deleting
+      // their account — that's the one promise this endpoint can't break.
+      console.error("Failed to record deleted-user snapshot (continuing with deletion):", e);
     }
 
     await deleteUser(session.userId);
