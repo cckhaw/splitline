@@ -1,6 +1,7 @@
 import Link from "next/link";
 import ThemeToggle from "@/components/ThemeToggle";
 import SiteFooter from "@/components/SiteFooter";
+import { CONTACT_EMAIL } from "@/lib/contact";
 
 export const metadata = {
   title: "Terms of Service — Splitline",
@@ -103,7 +104,7 @@ export default function TermsPage() {
           <h2>10. Contact Information</h2>
           <p>
             For privacy inquiries, legal notices, or data deletion requests, please contact:{" "}
-            <a href="mailto:splitline@khaw.cc">splitline@khaw.cc</a>.
+            <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a>.
           </p>
         </div>
       </div>

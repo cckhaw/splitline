@@ -264,7 +264,7 @@ export default function Dashboard() {
 
                 {insights.pace && (
                   <>
-                    <h2 style={{ marginTop: 20 }}>Race pace projection</h2>
+                    <h2 style={{ marginTop: 20 }}>Race Pace Prediction</h2>
                     <div className="pace-grid">
                       {insights.pace.predictions.map((p) => (
                         <div key={p.label} className="pace-cell">
