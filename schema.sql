@@ -137,6 +137,31 @@ CREATE TABLE IF NOT EXISTS race_day_plans (
   generated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- A GPX-derived course profile for the athlete's current race-day event
+-- (race_goals above). Unlike training_plans/race_day_plans, this is NOT
+-- kept across an event change — a course only makes sense paired with
+-- the specific race it was uploaded for, so lib/db.js's saveRaceGoal and
+-- deleteRaceGoal both clear this row whenever the event changes or is
+-- removed. `profile` is a resampled elevation-vs-distance series for the
+-- on-page chart; `segments` is a coarser breakdown (distance/elevation
+-- gain/loss/avg grade per segment) fed to the race-day AI call so
+-- pacing can be grounded in the real course rather than a single flat
+-- elevation-gain number.
+CREATE TABLE IF NOT EXISTS race_courses (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  filename TEXT,
+  total_distance_km DOUBLE PRECISION NOT NULL,
+  total_elevation_gain_m DOUBLE PRECISION NOT NULL,
+  total_elevation_loss_m DOUBLE PRECISION NOT NULL,
+  min_elevation_m DOUBLE PRECISION,
+  max_elevation_m DOUBLE PRECISION,
+  start_lat DOUBLE PRECISION,
+  start_lon DOUBLE PRECISION,
+  profile JSONB NOT NULL,
+  segments JSONB NOT NULL,
+  uploaded_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS strava_connections (
   user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   strava_athlete_id BIGINT,

@@ -267,25 +267,70 @@ UI) when the tier isn't eligible, since it's a background check, not a
 user-clicked action. A new plan — regenerated, adjusted, or from a
 changed goal — always clears any prior deviation record.
 
-### Race-day plan
+### Race Day Plan
 
-Under **Training → Race-day plan**, a page that turns the saved event
-plus race-day conditions entered by hand into an AI pacing and fueling
-plan (`generateRaceDayPlan`): overall pacing strategy, target pace per
-segment, timed fueling/hydration, heat/altitude adjustments, a pre-race
-checklist, and contingencies. Cached and tier-gated exactly like the
-training plan (`race_day_plans` table, `ai_usage` feature `race_day`).
+Under **Training → Race Day Plan**, a page that turns the saved event,
+an optional uploaded course, and race-day conditions into an AI pacing
+and fueling plan (`generateRaceDayPlan`): overall pacing strategy,
+target pace per segment, timed fueling/hydration, heat/altitude
+adjustments, a pre-race checklist, and contingencies. Cached and
+tier-gated exactly like the training plan (`race_day_plans` table,
+`ai_usage` feature `race_day`).
 
-`lib/raceDay.js` derives a grade-adjusted pace factor from the athlete's
-own flat-vs-hilly run history when there's enough of it, falling back to
-a documented ~3%-per-1%-grade heuristic otherwise. Three things from
-common "race day" feature requests are **not** built, and don't have a
-reasonable path inside a web dashboard: GPX course upload (course
-elevation gain is a plain number the athlete enters), a live weather
-pull (no weather API key in this environment; temperature/humidity are
-entered by hand), and real-time audio cues during the actual race (needs
-a native/mobile companion app; the plan instead renders on-page and
-downloads as a text pace/fueling sheet).
+- **GPX course upload.** The athlete uploads their course as a `.gpx`
+  file; `lib/gpxCourse.js` parses its track points (a hand-rolled
+  regex extractor rather than an XML-parser dependency — GPX track
+  points follow one very consistent shape across Strava, Garmin
+  Connect, and Komoot exports), computes cumulative distance via the
+  haversine formula, and resamples elevation onto a fixed 50m grid — a
+  noise-reduction step as much as a resampling one, since raw GPS/
+  barometric elevation summed point-to-point routinely overcounts
+  "climbing" by several times over. A sub-meter delta threshold on top
+  of that grid is the standard technique for a believable elevation-gain
+  figure from real-world GPS data. The result (`race_courses` table) is
+  a total distance/elevation-gain/loss/min/max, a ~120-point resampled
+  profile for the on-page chart (`lib/courseProfileChart.js`, same
+  visual language as the training plan's progress chart), and a coarser
+  ~12-segment breakdown fed to the AI call so `segment_pacing` can be
+  grounded in where the course actually climbs and descends rather than
+  a single flat elevation-gain number. A course is tied to one specific
+  event — changing or clearing the event (`saveRaceGoal`/`deleteRaceGoal`
+  in `lib/db.js`) clears the uploaded course with it, unlike the
+  AI-generated plan caches, which are deliberately left in place across
+  a goal change for tier-throttle fairness (see "Membership tiers"
+  above).
+- **Weather forecast, or historical average when there isn't one.** A
+  "Get weather for race day" button (`/api/race-day/weather`,
+  `lib/weather.js`) uses the uploaded course's own start coordinates —
+  no separate geocoding step — against Open-Meteo, which needs no API
+  key: a real forecast when the event date is inside its ~15-day
+  horizon, otherwise the average of actual weather on that same
+  calendar date over the past 5 years at that location, as the closest
+  available stand-in for a climatological normal. Either result just
+  prefills the temperature/humidity fields; they stay fully editable,
+  and the plan's prompt is told which source it got (forecast vs.
+  historical average vs. the athlete's own manual entry) so it can hedge
+  appropriately rather than treating a 5-year average as certain.
+- `lib/raceDay.js` derives a grade-adjusted pace factor from the
+  athlete's own flat-vs-hilly run history when there's enough of it,
+  falling back to a documented ~3%-per-1%-grade heuristic otherwise.
+
+**This project's dev sandbox could not verify the weather calls live** —
+its egress policy only allows a short allowlist of hosts, and
+`api.open-meteo.com`/`archive-api.open-meteo.com` aren't on it. The
+request/response handling in `lib/weather.js` matches Open-Meteo's
+documented API and fails gracefully at every step (a bad response, a
+timeout, no data for the date all fall through to the next fallback,
+down to leaving the fields for manual entry), but an actual deployment
+is the first place this really gets exercised end to end — worth a
+manual check after deploying, same caveat as the untested-live Stripe
+integration below.
+
+One thing from common "race day" feature requests is still **not**
+built, and doesn't have a reasonable path inside a web dashboard:
+real-time audio cues during the actual race, which needs a native/mobile
+companion app doing GPS-triggered playback mid-run. The plan instead
+renders on-page and downloads as a text pace/fueling sheet.
 
 ### Sharing and exporting panels
 
@@ -565,13 +610,17 @@ Vercel domain. Open the site, sign up, connect Strava, import.
   or ones missing the right streams, don't produce a reading; a plan
   younger than a week, or with no new activity since it was generated,
   simply isn't checked yet.
-- **The grade-adjustment factor behind the race-day plan is coarse.**
+- **The grade-adjustment factor behind the Race Day Plan is coarse.**
   Derived from whole-activity average pace/elevation, not per-kilometer
   splits (none are stored) — a directional comparison, not a
   Strava-grade-adjusted-pace-equivalent calculation.
-- **No live weather, no GPX upload, no real-time race-day audio** — see
-  "Race-day plan" above for why each doesn't have a reasonable path
-  inside a web dashboard.
+- **The weather forecast/historical-average fetch is unverified against
+  a live call** — see "Race Day Plan" above; this dev sandbox's egress
+  policy blocks the third-party host it needs, so an actual deployment
+  is the first real test.
+- **No real-time race-day audio cues** — needs a native/mobile companion
+  app doing GPS-triggered playback mid-run, a fundamentally different
+  piece of software than a web dashboard.
 - **Avatars are stored as data URIs in Postgres, not object storage.**
   Fine at this scale (capped ~1.5MB decoded); would need to move to
   blob storage well before that becomes a real constraint.

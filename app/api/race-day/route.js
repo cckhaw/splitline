@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getSessionUser } from "@/lib/authGuard";
 import {
-  getActivitiesForUser, getUserById, getRaceGoal, getRaceDayPlan, saveRaceDayPlan,
+  getActivitiesForUser, getUserById, getRaceGoal, getRaceCourse, getRaceDayPlan, saveRaceDayPlan,
   getAiUsage, recordAiUsage, friendlyDbErrorMessage,
 } from "@/lib/db";
 import { buildActivitySummary } from "@/lib/insights";
@@ -75,7 +75,16 @@ export async function POST(request) {
   const body = await request.json().catch(() => ({}));
   const temperatureC = Number(body.temperatureC);
   const humidityPct = body.humidityPct === "" || body.humidityPct == null ? null : Number(body.humidityPct);
-  const courseElevationGainM = Number(body.courseElevationGainM);
+  // Once a course is uploaded, its own computed elevation gain is
+  // authoritative — see below, after the course is loaded — but a
+  // number is still required here for the no-course path (and as a
+  // sane fallback if course loading somehow fails).
+  const manualElevationGainM = Number(body.courseElevationGainM);
+  // Provenance only, for display and for the AI prompt's confidence
+  // framing — never trusted for anything beyond that.
+  const temperatureMinC = Number.isFinite(Number(body.temperatureMinC)) ? Number(body.temperatureMinC) : null;
+  const temperatureMaxC = Number.isFinite(Number(body.temperatureMaxC)) ? Number(body.temperatureMaxC) : null;
+  const temperatureSource = ["forecast", "historical_average", "manual"].includes(body.temperatureSource) ? body.temperatureSource : "manual";
 
   if (!Number.isFinite(temperatureC) || temperatureC < MIN_TEMP_C || temperatureC > MAX_TEMP_C) {
     return NextResponse.json({ error: "invalid_temperature", message: `Enter an expected temperature between ${MIN_TEMP_C} and ${MAX_TEMP_C}°C.` }, { status: 400 });
@@ -83,17 +92,15 @@ export async function POST(request) {
   if (humidityPct != null && (!Number.isFinite(humidityPct) || humidityPct < 0 || humidityPct > 100)) {
     return NextResponse.json({ error: "invalid_humidity", message: "Humidity must be between 0 and 100%." }, { status: 400 });
   }
-  if (!Number.isFinite(courseElevationGainM) || courseElevationGainM < 0 || courseElevationGainM > MAX_ELEVATION_M) {
-    return NextResponse.json({ error: "invalid_elevation", message: "Enter a valid course elevation gain in meters." }, { status: 400 });
-  }
 
-  let goal, activities, user, cached, usage;
+  let goal, activities, user, course, cached, usage;
   try {
     goal = await getRaceGoal(session.userId);
     if (!goal) return NextResponse.json({ error: "no_goal", message: "Set an upcoming event on the Training plan page first." }, { status: 400 });
-    [activities, user, cached, usage] = await Promise.all([
+    [activities, user, course, cached, usage] = await Promise.all([
       getActivitiesForUser(session.userId, 30),
       getUserById(session.userId),
+      getRaceCourse(session.userId),
       getRaceDayPlan(session.userId),
       getAiUsage(session.userId, FEATURE),
     ]);
@@ -102,14 +109,26 @@ export async function POST(request) {
     return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
   }
 
+  // The uploaded course's own computed gain is real data; a manually
+  // typed number is only trusted when there's no course to derive it from.
+  const courseElevationGainM = course ? course.total_elevation_gain_m : manualElevationGainM;
+  if (!Number.isFinite(courseElevationGainM) || courseElevationGainM < 0 || courseElevationGainM > MAX_ELEVATION_M) {
+    return NextResponse.json({ error: "invalid_elevation", message: "Enter a valid course elevation gain in meters, or upload a GPX course." }, { status: 400 });
+  }
+
   const tier = resolveEffectiveTier(user);
   const now = new Date();
   const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now);
   const eventInfo = eventInfoFor(goal, now);
   const gradeAdjustment = computeGradeAdjustment(activities);
-  const raceDayInputs = { temperatureC, humidityPct, courseElevationGainM };
+  const raceDayInputs = { temperatureC, temperatureMinC, temperatureMaxC, humidityPct, courseElevationGainM, temperatureSource };
+  const courseSegments = course?.segments || null;
 
-  const inputHash = hashInput({ summary, eventInfo, raceDayInputs, gradeAdjustment });
+  // The course's uploaded_at is bumped on every save (including
+  // replacing it with a new file) — including it here means a new GPX
+  // upload changes the hash even if every manually-entered input stays
+  // exactly the same, so the plan regenerates against the new terrain.
+  const inputHash = hashInput({ summary, eventInfo, raceDayInputs, gradeAdjustment, courseUploadedAt: course?.uploaded_at || null });
   const sameContent = Boolean(cached && cached.input_hash === inputHash);
 
   if (sameContent) {
@@ -120,7 +139,7 @@ export async function POST(request) {
   if (eligible) {
     trackEvent(request, session.userId, "race_day_plan_generate", { trigger: cached ? "regenerate" : "generate" });
     try {
-      const plan = await generateRaceDayPlan(summary, eventInfo, raceDayInputs, gradeAdjustment);
+      const plan = await generateRaceDayPlan(summary, eventInfo, raceDayInputs, gradeAdjustment, courseSegments);
       try {
         await saveRaceDayPlan(session.userId, inputHash, raceDayInputs, plan);
         await recordAiUsage(session.userId, FEATURE);
