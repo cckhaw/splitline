@@ -36,7 +36,7 @@ export default function MobileNavMenu({ onNavigate }) {
             Training plan
           </Link>
           <Link href="/race-day" className={`user-menu-item nested${pathname === "/race-day" ? " active" : ""}`} onClick={onNavigate}>
-            Race-day plan
+            Race Day Plan
           </Link>
         </>
       )}

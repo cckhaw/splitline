@@ -1,7 +1,7 @@
 import "./globals.css";
 
 export const metadata = {
-  title: "Splitline — AI Training, Race-Day & Injury Advisor for Strava",
+  title: "Splitline — AI Training, Race Day & Injury Advisor for Strava",
   description:
     "Splitline turns your Strava history into an AI training plan, race-day pacing and fueling strategy, injury-risk and recovery guidance, gear-wear tracking, and cockpit-readout telemetry overlays for your feed.",
 };

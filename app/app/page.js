@@ -353,9 +353,10 @@ export default function Dashboard() {
               </p>
             </div>
             <div className="guide-card">
-              <h4><span className="guide-card-icon">🏁</span> Race-day pacing &amp; fueling plan</h4>
+              <h4><span className="guide-card-icon">🏁</span> Race Day Plan</h4>
               <p>
-                Enter your race-day conditions and get a segment-by-segment pacing strategy, fueling
+                Upload your course as a GPX file for a real elevation profile, get forecasted (or
+                historical) weather for race day, and get a segment-by-segment pacing strategy, fueling
                 plan, and contingencies grounded in your own training history.
               </p>
             </div>

@@ -127,7 +127,7 @@ export default function PrivacyPage() {
             <strong>Account &amp; data deletion.</strong> Delete your own account any time from the
             &ldquo;Danger zone&rdquo; on your <Link href="/account">Account</Link> page (or email{" "}
             <a href={`mailto:${CONTACT_EMAIL}`}>{CONTACT_EMAIL}</a> to request it). This immediately and
-            permanently removes your profile, imported activities, gear records, training and race-day plans,
+            permanently removes your profile, imported activities, gear records, training and race day plans,
             and any cached AI-generated insights. The one exception: we retain your name, email, membership
             tier, and a summary of how you used Splitline (not the activities or plans themselves) so we can
             follow up about your feedback on leaving — you can ask us to erase that too by emailing{" "}

@@ -522,7 +522,7 @@ export default function AccountPage() {
           <form onSubmit={deleteAccount}>
             <div className="status-line warn" style={{ marginTop: 0 }}>
               This cannot be undone. Deleting your account immediately and permanently erases your profile,
-              every imported Strava activity, gear records, training and race-day plans, and any cached AI
+              every imported Strava activity, gear records, training and race day plans, and any cached AI
               insights — none of it can be recovered. You&rsquo;ll need to sign up for a brand new account to
               use Splitline again.
             </div>

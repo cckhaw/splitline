@@ -42,7 +42,7 @@ export default function TopNav() {
         {trainingOpen && (
           <div className="top-nav-dropdown">
             <Link href="/training-plan" onClick={() => setTrainingOpen(false)}>Training plan</Link>
-            <Link href="/race-day" onClick={() => setTrainingOpen(false)}>Race-day plan</Link>
+            <Link href="/race-day" onClick={() => setTrainingOpen(false)}>Race Day Plan</Link>
           </div>
         )}
       </div>
