@@ -231,6 +231,17 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 /* marketing homepage */
 .navlinks { display: flex; align-items: center; gap: 18px; }
 .navlinks a { color: var(--ink-dim); text-decoration: none; font-size: calc(14px * var(--fs-scale, 1)); }
+
+/* components/PublicNav.js — Features/Pricing/theme toggle/Log in wrap onto
+   a second row at phone widths before the header itself gets narrow
+   enough to justify it, so below that breakpoint they collapse into the
+   same hamburger-dropdown pattern the dashboard header uses. */
+.public-nav-links { display: flex; align-items: center; gap: 18px; }
+.public-nav-menu { display: none; }
+@media (max-width: 640px) {
+  .public-nav-links { display: none; }
+  .public-nav-menu { display: block; }
+}
 .navcta { width: auto; padding: 9px 18px; }
 .navcta.wide { padding: 13px 30px; font-size: calc(15px * var(--fs-scale, 1)); margin-top: 8px; }
 .hero-cta {
