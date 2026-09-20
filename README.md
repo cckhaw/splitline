@@ -105,19 +105,26 @@ them.
 Every page behind login shares one header (`components/AppHeader.js`):
 the wordmark, a persistent primary nav (Dashboard, Training) next to it,
 and the athlete's name/tier on the right, opening a dropdown — My
-account, **Re-sync from Strava**, Light/dark mode, font size, Log out
+account, **Re-sync from Strava** (relabeled **Re-sync from Strava &
+Oura** once an Oura Ring is also connected), **Connect Oura Ring** /
+**Disconnect Oura Ring**, Light/dark mode, font size, Log out
 (`components/UserMenu.js`) — instead of spreading those as flat links.
-On narrow screens the same content collapses into a hamburger menu with
-an accordion for Dashboard/Training (`components/MobileNavMenu.js`).
+The Oura control works from any page (it's just a fetch-and-redirect to
+connect, a POST to disconnect — neither needs page-specific state) and
+updates that page's own view of the connection immediately. On narrow
+screens the same content collapses into a hamburger menu with an
+accordion for Dashboard/Training (`components/MobileNavMenu.js`).
 
 **Re-sync from Strava** is the one action that refreshes everything:
 it re-imports up to 30 activities, then re-fetches the Overtraining
 Shield panel, the Activity Summary infographic, an Oura Ring sync when
 one is connected (see "Oura Ring sleep and recovery data" below), and —
-if there's a saved training plan — checks it for deviation (see below).
-There's no separate manual "Refresh" button on any of those; a re-sync
-is what changes the underlying data each of them is computed from, which
-is what actually triggers a fresh read.
+if there's a saved training plan — checks it for deviation and
+regenerates/adjusts the plan's guidance around the freshest activity
+*and* recovery data (see "Comparing actual training against the plan"
+below). There's no separate manual "Refresh" button on any of those; a
+re-sync is what changes the underlying data each of them is computed
+from, which is what actually triggers a fresh read.
 
 Dashboard layout, top to bottom in the main column: Training load (race
 pace prediction included), Overtraining Shield, then Activity Summary. A
@@ -218,6 +225,16 @@ for Oura the way there is for Strava, since Oura issues one application
 per developer account, not per end user). Tokens are stored encrypted at
 rest the same way Strava's are (`oura_connections`, `lib/crypto.js`).
 
+**Connecting is independent of Strava** — the dashboard shows a "Connect
+Oura Ring" panel to any signed-in athlete regardless of whether Strava is
+connected yet, so a brand-new signup sees both connect options together
+rather than Oura only appearing after Strava does. The panel has a "Not
+now" dismissal (remembered in `localStorage`, `splitline_oura_dismissed`)
+for anyone who doesn't want it, and disappears entirely once actually
+connected — from that point, connecting/disconnecting lives in the
+hamburger menu (`components/UserMenu.js`) rather than as a permanent
+"connected" panel taking up dashboard space.
+
 Every **Re-sync from Strava** that completes with a connected Oura Ring
 also pulls sleep data (`fetchDailyMetrics`, merging Oura's `/sleep`,
 `/daily_sleep`, and `/daily_readiness` endpoints) for the exact date
@@ -304,7 +321,16 @@ sends the aggregated activity summary plus the event details to Claude
 The plan is cached (`training_plans` table) and only regenerated when
 the goal or the activity data changes, or via "Refresh plan". Setting a
 new event clears the cached plan (but not the tier's refresh clock —
-see "Membership tiers" below).
+see "Membership tiers" below). When an Oura Ring is connected, the same
+`sleep_recovery` data described under "Overtraining Shield" above flows
+into the activity summary sent to Claude too, and the plan's prompt is
+told to build more conservatively — with real teeth in the recovery
+guidelines — when HRV/resting-heart-rate trends or `underRecoveryFlag`
+say the athlete isn't recovering well, rather than planning off training
+load alone. A plan generated before an Oura connection existed is
+naturally treated as stale the next time this route runs (its cached
+input hash no longer matches once `sleep_recovery` is part of the
+summary), so it regenerates once to pick the new signal up.
 
 ### Comparing actual training against the plan
 
@@ -313,9 +339,15 @@ was generated has drifted from what the plan called for.
 `lib/trainingPlanDeviation.js` buckets activities imported since the
 plan's `generated_at` into calendar weeks, and
 `/api/training-plan/deviation` hands those — plus the plan's own phases
-(guidance text, not rigid per-week numbers) and the athlete's
-training-load/biomechanics signals — to a dedicated Claude call,
-`generateTrainingPlanDeviation`. Since the plan itself is guidance
+(guidance text, not rigid per-week numbers), the athlete's
+training-load/biomechanics signals, and `sleep_recovery` when an Oura
+Ring is connected — to a dedicated Claude call,
+`generateTrainingPlanDeviation`. A heart-rate or fatigue deviation
+alongside `underRecoveryFlag` true (or a worsening HRV/resting-heart-rate
+trend) is weighted as a stronger signal than the activity data would
+suggest alone, pushing the goal-impact assessment and recommended action
+toward the more cautious end; the same deviation with strong recovery
+numbers reads as comparatively reassuring. Since the plan itself is guidance
 ranges rather than fixed numeric targets, there's no strict formula for
 "10% off plan": the model makes that judgment call directly, the same
 way it judges risk level elsewhere. It returns which of distance, pace,

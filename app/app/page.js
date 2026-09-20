@@ -20,6 +20,8 @@ const OURA_ERROR_MESSAGES = {
   access_denied: "Oura access wasn't granted, so there's no sleep data to show yet.",
 };
 
+const OURA_DISMISS_STORAGE_KEY = "splitline_oura_dismissed";
+
 export default function Dashboard() {
   const router = useRouter();
   const [me, setMe] = useState(null); // null = loading
@@ -46,7 +48,7 @@ export default function Dashboard() {
   const [deviationActionError, setDeviationActionError] = useState("");
 
   const [ouraConnecting, setOuraConnecting] = useState(false);
-  const [ouraDisconnecting, setOuraDisconnecting] = useState(false);
+  const [ouraDismissed, setOuraDismissed] = useState(false);
 
   const [theme, setTheme] = useState("ink");
   const [units, setUnits] = useState("metric");
@@ -80,6 +82,11 @@ export default function Dashboard() {
       setStatusWarn(false);
       setStatus("Oura Ring connected — re-sync from the menu to pull in your sleep data.");
       window.history.replaceState({}, "", "/app");
+    }
+    try {
+      setOuraDismissed(localStorage.getItem(OURA_DISMISS_STORAGE_KEY) === "1");
+    } catch {
+      // Private browsing / blocked storage — the panel just won't remember a dismissal.
     }
     // "Re-sync from Strava" in the hamburger menu links here from other
     // pages (it can only run the import directly when already on the
@@ -130,18 +137,15 @@ export default function Dashboard() {
     }
   }
 
-  async function handleDisconnectOura() {
-    setOuraDisconnecting(true);
+  // Disconnecting lives in the hamburger menu (components/UserMenu.js)
+  // now that this panel disappears once connected — nowhere on this page
+  // itself to put a Disconnect button anymore.
+  function handleDismissOura() {
+    setOuraDismissed(true);
     try {
-      await fetch("/api/oura/disconnect", { method: "POST" });
-      setMe((prev) => (prev ? { ...prev, ouraConnected: false } : prev));
-      setStatus("Oura Ring disconnected.");
-      setStatusWarn(false);
-    } catch (e) {
-      setStatusWarn(true);
-      setStatus("Couldn't disconnect Oura Ring — try again.");
-    } finally {
-      setOuraDisconnecting(false);
+      localStorage.setItem(OURA_DISMISS_STORAGE_KEY, "1");
+    } catch {
+      // Private browsing / blocked storage — the dismissal just won't stick past this load.
     }
   }
 
@@ -282,7 +286,16 @@ export default function Dashboard() {
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} onResync={runImport} resyncing={importing} />
+      <AppHeader
+        name={me.name || me.email}
+        tier={me.tier}
+        isTrial={me.isTrial}
+        avatarUrl={me.avatarUrl}
+        onResync={runImport}
+        resyncing={importing}
+        ouraConnected={me.ouraConnected}
+        onOuraChange={(connected) => setMe((prev) => (prev ? { ...prev, ouraConnected: connected } : prev))}
+      />
 
       {deviation && (
         <div className="panel" style={{ borderLeft: "4px solid var(--amber)", marginBottom: 18 }}>
@@ -360,30 +373,24 @@ export default function Dashboard() {
         </div>
       )}
 
-      {me.stravaConnected && (
-        <div className="panel" id="oura">
-          <h2>{me.ouraConnected ? "Oura Ring connected" : "Connect Oura Ring"}</h2>
-          {me.ouraConnected ? (
-            <>
-              <div className="hint">
-                Sleep, HRV, resting heart rate, and readiness now feed the Activity Summary and Overtraining
-                Shield panels below. Re-sync from the menu any time to pull in new nights.
-              </div>
-              <button style={{ width: "auto", padding: "7px 14px", marginTop: 10 }} onClick={handleDisconnectOura} disabled={ouraDisconnecting}>
-                {ouraDisconnecting ? "Disconnecting…" : "Disconnect Oura Ring"}
-              </button>
-            </>
-          ) : (
-            <>
-              <button className="primary" onClick={handleConnectOura} disabled={ouraConnecting}>
-                {ouraConnecting ? "Connecting…" : "Connect Oura Ring"}
-              </button>
-              <div className="hint">
-                Optional — adds real sleep stages, HRV, resting heart rate, and readiness to your Activity
-                Summary and Overtraining Shield panels, instead of training-load estimates alone.
-              </div>
-            </>
-          )}
+      {/* Independent of Strava's own connect panel above — a brand-new
+          user sees both options together, and this one disappears
+          entirely once connected (management moves to the hamburger
+          menu, components/UserMenu.js) rather than sticking around as a
+          permanent "connected" panel taking up dashboard space. */}
+      {!me.ouraConnected && !ouraDismissed && (
+        <div className="panel">
+          <h2>Connect Oura Ring</h2>
+          <button className="primary" onClick={handleConnectOura} disabled={ouraConnecting}>
+            {ouraConnecting ? "Connecting…" : "Connect Oura Ring"}
+          </button>
+          <div className="hint">
+            Optional — adds real sleep stages, HRV, resting heart rate, and readiness to your Activity
+            Summary and Overtraining Shield panels, instead of training-load estimates alone.
+          </div>
+          <div className="advanced-toggle" onClick={handleDismissOura}>
+            Not now — I&rsquo;ll connect it later from the menu
+          </div>
         </div>
       )}
 
@@ -588,8 +595,8 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <div className="hint" style={{ marginTop: 10 }}>
-                    Connect an <a href="#oura">Oura Ring</a> above for real sleep, HRV, and readiness data here
-                    instead of training-load estimates alone.
+                    Connect an Oura Ring from the menu for real sleep, HRV, and readiness data here instead
+                    of training-load estimates alone.
                   </div>
                 )}
 
@@ -663,10 +670,10 @@ export default function Dashboard() {
               <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
                 One infographic for your last {activities.length} activities — total training time, a fatigue
                 read on how recently and how hard you've been training, and an intensity trend across the
-                period. Connect an <a href="#oura">Oura Ring</a> above to add a matching recovery trend —
-                sleep, HRV, resting heart rate, and readiness — right alongside it, so progress and recovery
-                sit side by side. Weather/humidity aren't shown — Strava only occasionally records a device
-                temperature, and there's no live weather source wired up.
+                period. Connect an Oura Ring from the menu to add a matching recovery trend — sleep, HRV,
+                resting heart rate, and readiness — right alongside it, so progress and recovery sit side by
+                side. Weather/humidity aren't shown — Strava only occasionally records a device temperature,
+                and there's no live weather source wired up.
                 {" "}<Link href="/activities">See each activity&rsquo;s own card — Last 30 Activities →</Link>
               </div>
               <div className="toggle-group" style={{ marginBottom: 12 }}>

@@ -16,11 +16,13 @@ const TIER_LABELS = { free: "Free", plus: "Plus", pro: "Pro" };
 // name (with their membership tier) opens a dropdown with the rest of
 // the account-level navigation, instead of spreading those links flat
 // across the header.
-export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, resyncing }) {
+export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, resyncing, ouraConnected, onOuraChange }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(null);
   const [fontScale, setFontScale] = useState(null);
+  const [ouraBusy, setOuraBusy] = useState(false);
+  const [ouraError, setOuraError] = useState("");
   const ref = useRef(null);
 
   useEffect(() => {
@@ -75,8 +77,45 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, res
     else router.push("/app?resync=1");
   }
 
+  // Self-contained (unlike resync, which the dashboard often owns) since
+  // connecting is just "fetch, then redirect" and disconnecting is just a
+  // POST — neither needs page-specific state, so every page that renders
+  // this menu gets working Oura controls without wiring anything beyond
+  // the ouraConnected/onOuraChange props already threaded through
+  // AppHeader. onOuraChange lets the host page update its own `me` state
+  // after a change it didn't itself trigger.
+  async function handleConnectOura() {
+    setOuraBusy(true);
+    setOuraError("");
+    try {
+      const res = await fetch("/api/oura/connect", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Couldn't start the Oura connection.");
+      window.location.href = data.authorizeUrl;
+    } catch (e) {
+      setOuraError(e.message);
+      setOuraBusy(false);
+    }
+  }
+
+  async function handleDisconnectOura() {
+    setOuraBusy(true);
+    setOuraError("");
+    try {
+      const res = await fetch("/api/oura/disconnect", { method: "POST" });
+      if (!res.ok) throw new Error("Couldn't disconnect Oura Ring — try again.");
+      onOuraChange?.(false);
+      setOpen(false);
+    } catch (e) {
+      setOuraError(e.message);
+    } finally {
+      setOuraBusy(false);
+    }
+  }
+
   const tierLabel = TIER_LABELS[tier] || TIER_LABELS.free;
   const tierSuffix = isTrial ? " - Trial" : "";
+  const resyncLabel = resyncing ? "Re-syncing…" : ouraConnected ? "Re-sync from Strava & Oura" : "Re-sync from Strava";
 
   return (
     <div className="user-menu" ref={ref}>
@@ -95,8 +134,20 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, res
           </div>
           <Link href="/account" onClick={() => setOpen(false)}>My account</Link>
           <div className="user-menu-item" onClick={handleResync} style={resyncing ? { opacity: 0.6, cursor: "default" } : undefined}>
-            {resyncing ? "Re-syncing…" : "Re-sync from Strava"}
+            {resyncLabel}
           </div>
+          {ouraConnected != null && (
+            <div
+              className="user-menu-item"
+              onClick={ouraConnected ? handleDisconnectOura : handleConnectOura}
+              style={ouraBusy ? { opacity: 0.6, cursor: "default" } : undefined}
+            >
+              {ouraBusy
+                ? ouraConnected ? "Disconnecting…" : "Connecting…"
+                : ouraConnected ? "Disconnect Oura Ring" : "Connect Oura Ring"}
+            </div>
+          )}
+          {ouraError && <div className="user-menu-error">{ouraError}</div>}
           {theme && (
             <div className="user-menu-item" onClick={toggleTheme}>
               <ThemeIcon theme={theme} style={{ marginRight: 8 }} />

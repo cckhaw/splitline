@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getSessionUser } from "@/lib/authGuard";
-import { getActivitiesForUser, getUserById, getRaceGoal, getTrainingPlan, saveTrainingPlan, getAiUsage, recordAiUsage, friendlyDbErrorMessage } from "@/lib/db";
+import { getActivitiesForUser, getUserById, getRaceGoal, getTrainingPlan, saveTrainingPlan, getSleepMetricsForActivities, getAiUsage, recordAiUsage, friendlyDbErrorMessage } from "@/lib/db";
 import { buildActivitySummary } from "@/lib/insights";
 import { generateTrainingPlan } from "@/lib/anthropic";
 import { resolveEffectiveTier, isRefreshEligible, nextEligibleDate } from "@/lib/membership";
@@ -45,7 +45,8 @@ export async function GET(request) {
 
   const tier = resolveEffectiveTier(user);
   const now = new Date();
-  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now);
+  const sleepMetrics = await getSleepMetricsForActivities(session.userId, activities);
+  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now, sleepMetrics);
   const eventInfo = {
     eventType: goal.eventType,
     eventName: goal.eventName,
