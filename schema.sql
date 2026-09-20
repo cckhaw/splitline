@@ -173,6 +173,45 @@ CREATE TABLE IF NOT EXISTS strava_connections (
   connected_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
+-- Oura Ring OAuth tokens, one connection per user — same shape and same
+-- encrypted-at-rest treatment as strava_connections, but no "bring your
+-- own app" option (just the platform's own registered Oura application,
+-- OURA_CLIENT_ID/OURA_CLIENT_SECRET).
+CREATE TABLE IF NOT EXISTS oura_connections (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  access_token TEXT NOT NULL,   -- encrypted at rest, see lib/crypto.js
+  refresh_token TEXT NOT NULL,  -- encrypted at rest
+  expires_at BIGINT NOT NULL,   -- unix seconds
+  oura_user_id TEXT,            -- Oura's personal_info id, for reference only
+  connected_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Daily sleep/recovery metrics pulled from Oura API v2 (lib/oura.js),
+-- merged from three of its endpoints (/sleep, /daily_sleep,
+-- /daily_readiness) into one row per calendar day. Cached the same way
+-- activities are, and re-synced on every "Re-sync from Strava" (see
+-- /api/import) for the date range starting the day of the earliest of
+-- the athlete's last 30 Strava activities through today — so the
+-- Activity Summary and Overtraining Shield panels can line sleep/
+-- recovery data up against the exact training period they already show.
+CREATE TABLE IF NOT EXISTS oura_daily_metrics (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day DATE NOT NULL,
+  total_sleep_min DOUBLE PRECISION,
+  deep_sleep_min DOUBLE PRECISION,
+  rem_sleep_min DOUBLE PRECISION,
+  light_sleep_min DOUBLE PRECISION,
+  sleep_efficiency_pct DOUBLE PRECISION,
+  avg_hrv_ms DOUBLE PRECISION,      -- average_hrv (rMSSD) from the night's main sleep period
+  resting_hr_bpm DOUBLE PRECISION,  -- lowest_heart_rate from the night's main sleep period
+  sleep_score INTEGER,              -- daily_sleep's 0-100 score
+  readiness_score INTEGER,          -- daily_readiness's 0-100 score
+  imported_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (user_id, day)
+);
+CREATE INDEX IF NOT EXISTS idx_oura_daily_metrics_user_day ON oura_daily_metrics (user_id, day DESC);
+
 CREATE TABLE IF NOT EXISTS activities (
   id SERIAL PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,

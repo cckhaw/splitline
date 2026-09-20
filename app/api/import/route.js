@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { getStravaConnection, updateStravaTokens, upsertActivity, countActivitiesForUser, upsertGear, setStravaAvatar } from "@/lib/db";
+import {
+  getStravaConnection, updateStravaTokens, upsertActivity, getActivitiesForUser, countActivitiesForUser, upsertGear, setStravaAvatar,
+  getOuraConnection, updateOuraTokens, upsertOuraDailyMetric,
+} from "@/lib/db";
 import { getValidAccessToken, listActivities, getActivity, getStreams, getGear, getAthlete } from "@/lib/strava";
+import { getValidAccessToken as getValidOuraAccessToken, fetchDailyMetrics } from "@/lib/oura";
 import { trackEvent } from "@/lib/usageEvents";
 
 export const runtime = "nodejs";
@@ -14,6 +18,40 @@ function trim(arr) {
   if (!arr || !arr.length) return null;
   const step = Math.max(1, Math.floor(arr.length / 150));
   return arr.filter((_, i) => i % step === 0);
+}
+
+function isoDate(d) {
+  return new Date(d).toISOString().slice(0, 10);
+}
+
+// Fetches and caches Oura sleep/recovery data for the same period the
+// Activity Summary and Overtraining Shield panels already show — from
+// the day of the earliest of the athlete's last 30 Strava activities
+// through today — every time this completes, same as the Strava sync it
+// rides alongside. Best-effort: no Oura connection, or any failure here,
+// never blocks or fails the Strava import itself.
+async function syncOuraData(request, userId) {
+  const connection = await getOuraConnection(userId);
+  if (!connection) return;
+
+  try {
+    const activities = await getActivitiesForUser(userId, MAX_ACTIVITIES);
+    if (!activities.length) return;
+    const earliest = activities.reduce((min, a) => (new Date(a.startDate) < new Date(min.startDate) ? a : min));
+    const startDate = isoDate(earliest.startDate);
+    const endDate = isoDate(new Date());
+
+    const { accessToken, refreshed } = await getValidOuraAccessToken(connection);
+    if (refreshed) await updateOuraTokens(userId, refreshed);
+
+    const days = await fetchDailyMetrics(accessToken, startDate, endDate);
+    for (const day of days) {
+      await upsertOuraDailyMetric(userId, day);
+    }
+    trackEvent(request, userId, "oura_sync", { days: days.length });
+  } catch (e) {
+    console.error("Oura sync failed (continuing without it):", e);
+  }
 }
 
 export async function POST(request) {
@@ -75,6 +113,7 @@ export async function POST(request) {
 
     const remaining = MAX_ACTIVITIES - (page - 1) * PAGE_SIZE;
     if (remaining <= 0) {
+      await syncOuraData(request, session.userId);
       return NextResponse.json({ imported: 0, total: await countActivitiesForUser(session.userId), done: true });
     }
 
@@ -142,6 +181,7 @@ export async function POST(request) {
 
     const total = await countActivitiesForUser(session.userId);
     const done = summaries.length < PAGE_SIZE || total >= MAX_ACTIVITIES;
+    if (done) await syncOuraData(request, session.userId);
     return NextResponse.json({ imported, total, done, nextPage: page + 1 });
   } catch (e) {
     return NextResponse.json({ error: "strava_error", message: String(e.message || e) }, { status: 502 });

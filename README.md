@@ -6,11 +6,13 @@ activities, and gets a dashboard of AI-assisted training analysis built
 from that data — an overtraining/injury-risk read, a periodized training
 plan that tracks itself against actual training, a race-day pacing and
 fueling plan, equipment wear tracking, and shareable exports of all of
-it. Membership tiers gate how often the AI panels refresh; Stripe
-handles billing. A separate, env-var-gated admin module gives the site
-operator usage analytics and manual account controls. It's also still a
-hosted MCP connector at `/api/mcp` for anyone who just wants the overlay
-renderer as a tool in their own agent.
+it. An optional Oura Ring connection adds real sleep, HRV, resting
+heart rate, and readiness data alongside all of that. Membership tiers
+gate how often the AI panels refresh; Stripe handles billing. A
+separate, env-var-gated admin module gives the site operator usage
+analytics and manual account controls. It's also still a hosted MCP
+connector at `/api/mcp` for anyone who just wants the overlay renderer
+as a tool in their own agent.
 
 Most of what's below was actually run, not just written — signup through
 Google/password login, Strava-connect (both the shared app and "bring
@@ -19,10 +21,12 @@ seeded fixtures where a live Strava/Anthropic/Stripe credential isn't
 available in this environment), account changes, self-service deletion,
 the admin module end to end, and `next build`, all exercised against a
 real local Postgres and, for the UI, a Playwright-driven browser. The
-two things that are **not** tested against a live third party: a real
-round trip against Strava's own servers (needs credentials only you can
-create) and Stripe billing against an actual account (needs live keys —
-see "Membership tiers and billing" below for exactly what was and wasn't
+things that are **not** tested against a live third party: a real round
+trip against Strava's own servers or Oura's own servers (both need
+credentials only you can create), the weather forecast/historical-average
+fetch (this dev sandbox's egress policy blocks the host it needs), and
+Stripe billing against an actual account (needs live keys — see
+"Membership tiers and billing" below for exactly what was and wasn't
 verified).
 
 ## Contents
@@ -108,14 +112,15 @@ an accordion for Dashboard/Training (`components/MobileNavMenu.js`).
 
 **Re-sync from Strava** is the one action that refreshes everything:
 it re-imports up to 30 activities, then re-fetches the Overtraining
-Shield panel, the Strava Summary infographic, and — if there's a saved
-training plan — checks it for deviation (see below). There's no
-separate manual "Refresh" button on any of those three; a re-sync is
-what changes the underlying data each of them is computed from, which
+Shield panel, the Activity Summary infographic, an Oura Ring sync when
+one is connected (see "Oura Ring sleep and recovery data" below), and —
+if there's a saved training plan — checks it for deviation (see below).
+There's no separate manual "Refresh" button on any of those; a re-sync
+is what changes the underlying data each of them is computed from, which
 is what actually triggers a fresh read.
 
 Dashboard layout, top to bottom in the main column: Training load (race
-pace prediction included), Overtraining Shield, then Strava Summary. A
+pace prediction included), Overtraining Shield, then Activity Summary. A
 sticky right-hand sidebar holds Equipment Lifecycle & Telemetry. All of
 it only renders once there's data to compute from.
 
@@ -142,6 +147,20 @@ A **physics-model + LLM** hybrid, not an LLM guessing from raw numbers:
   `training_adjustment` — populated only when the data actually signals
   a problem, and shown as guidance with a link to the Training Plan page
   rather than rewriting the saved plan automatically.
+- **Real recovery data, when an Oura Ring is connected**
+  (`lib/sleepRecovery.js`): 7-day vs. prior-21-day trend in HRV and
+  resting heart rate, plus an `underRecoveryFlag` that only fires when
+  HRV has dropped **and** resting heart rate has risen over the same
+  week — the two moving together is the standard combined
+  under-recovery signal; either alone is too noisy on its own. The
+  panel shows these numbers directly, and the LLM layer is explicitly
+  told that real sleep/HRV/resting-heart-rate data should **outweigh**
+  the activity-derived heuristics above when the two disagree — an
+  elevated ACWR alongside strong HRV and a high readiness score reads
+  as materially lower risk than the same ACWR with `underRecoveryFlag`
+  true. Without a connected Oura Ring, the panel reasons from the
+  activity-derived signals alone, exactly as it did before this
+  integration.
 
 **Age does not actually come from Strava** — its public API never
 returns date of birth, for any account. The account page's optional
@@ -153,12 +172,15 @@ underlying activity summary actually changes, subject to the
 membership tier's refresh cadence. There's no manual refresh button; a
 Strava re-sync is what changes the summary and triggers a fresh read.
 
-### Strava Summary
+### Activity Summary
 
 One infographic (`lib/telemetrySummary.js` aggregates,
 `lib/telemetrySummarySvg.js` draws, `/api/telemetry-summary` serves it as
 SVG for the live preview or PNG for "Save as image") summarizing the
-whole imported period, rather than one card per activity:
+whole imported period, rather than one card per activity — training on
+top, recovery underneath, so progress and how well the athlete is
+recovering from it read side by side instead of guessing at one without
+the other:
 
 - **Total training time**, the date range, and the acute:chronic load
   figure.
@@ -175,10 +197,59 @@ whole imported period, rather than one card per activity:
   exists in this environment and Strava has no humidity field at all;
   the one real signal is Strava's occasional device-recorded
   `average_temp`.
+- **A recovery trend, once an Oura Ring is connected** — see "Oura Ring
+  sleep and recovery data" below. Deliberately drawn as its own
+  bar-chart trace below the training-intensity one, rather than a second
+  scale on the same axis: two measures at different scales sharing one
+  chart is close to guaranteed to mislead.
 
 A theme toggle (Ink/Paper/Signal) and a units toggle (metric/imperial)
 apply instantly, client-side, since the whole summary is already fetched
 as data.
+
+### Oura Ring sleep and recovery data
+
+An optional, per-user OAuth2 connection (`/api/oura/connect`,
+`/callback`, `/disconnect`, `lib/oura.js`) to Oura's API v2 — a second
+"bring your own account" integration alongside Strava, using the
+platform's own registered Oura application (`OURA_CLIENT_ID`/
+`OURA_CLIENT_SECRET`; there's no per-user "bring your own app" option
+for Oura the way there is for Strava, since Oura issues one application
+per developer account, not per end user). Tokens are stored encrypted at
+rest the same way Strava's are (`oura_connections`, `lib/crypto.js`).
+
+Every **Re-sync from Strava** that completes with a connected Oura Ring
+also pulls sleep data (`fetchDailyMetrics`, merging Oura's `/sleep`,
+`/daily_sleep`, and `/daily_readiness` endpoints) for the exact date
+range Splitline already uses for the rest of the dashboard — from the
+day of the earliest of the athlete's last 30 Strava activities through
+today — and caches one row per night (`oura_daily_metrics`): total/deep/
+REM/light sleep, sleep efficiency, average HRV, resting heart rate,
+sleep score, and readiness score. This piggybacks on the existing sync
+action rather than adding a separate button, and is entirely
+best-effort — any failure (no connection, a network error, an API
+error) is logged and skipped, and never blocks or fails the Strava
+import itself.
+
+`lib/sleepRecovery.js` turns the cached nights into the numbers the
+Activity Summary and Overtraining Shield panels actually show: 7-day
+averages for HRV, resting heart rate, readiness, sleep score, and sleep
+duration, a 7-day-vs-prior-21-day trend percentage for HRV and resting
+heart rate, and the combined `underRecoveryFlag` described under
+"Overtraining Shield" above. Splitline's "Well recovered" / "Adequate
+recovery" / "Recovery lagging" bands on the readiness score are its own
+plain-language read of the 0-100 number, not Oura's own proprietary
+category wording.
+
+**This project's dev sandbox could not verify the Oura API calls
+live** — its egress policy blocks both `cloud.ouraring.com` and
+`api.ouraring.com`, the same constraint documented for the weather
+integration below. The OAuth flow and data-fetch code in `lib/oura.js`
+follow Oura's documented API v2 shapes and were exercised end-to-end
+against seeded database rows standing in for real Oura responses, but
+an actual deployment with real `OURA_CLIENT_ID`/`OURA_CLIENT_SECRET`
+credentials is the first place the live OAuth round trip and the real
+API responses get exercised.
 
 ### Last 30 Activities
 
@@ -561,6 +632,7 @@ deletes everything it made. All five lines should print `✓`.
 |---|---|
 | `STRAVA_CLIENT_ID` | from step 1 |
 | `STRAVA_CLIENT_SECRET` | from step 1 |
+| `OURA_CLIENT_ID` / `OURA_CLIENT_SECRET` | optional — register an application at [cloud.ouraring.com/oauth/applications](https://cloud.ouraring.com/oauth/applications) (redirect URI `https://your-domain/api/oura/callback`) to power the sleep/HRV/readiness data in the Activity Summary and Overtraining Shield panels. Without these, the "Connect Oura Ring" button shows "not configured"; the rest of the app is unaffected. |
 | `SESSION_SECRET` | random 32+ chars — `openssl rand -base64 32` |
 | `ENCRYPTION_KEY` | random 32+ chars — a **different** value than `SESSION_SECRET` |
 | `DATABASE_URL` | from step 2 |
@@ -618,6 +690,9 @@ Vercel domain. Open the site, sign up, connect Strava, import.
   a live call** — see "Race Day Plan" above; this dev sandbox's egress
   policy blocks the third-party host it needs, so an actual deployment
   is the first real test.
+- **The Oura Ring integration is unverified against a live call, for the
+  same reason** — see "Oura Ring sleep and recovery data" above; this
+  dev sandbox's egress policy blocks Oura's API hosts too.
 - **No real-time race-day audio cues** — needs a native/mobile companion
   app doing GPS-triggered playback mid-run, a fundamentally different
   piece of software than a web dashboard.
@@ -641,5 +716,7 @@ of them for local work, just `DATABASE_URL`, `SESSION_SECRET`, and
 console without `RESEND_API_KEY`).
 
 For local Strava OAuth testing, set the app's Authorization Callback
-Domain to `localhost` (Strava allows this). For local admin testing, set
+Domain to `localhost` (Strava allows this). For local Oura OAuth
+testing, add `http://localhost:3000/api/oura/callback` as a redirect URI
+on the Oura application. For local admin testing, set
 `ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env.local` too.
