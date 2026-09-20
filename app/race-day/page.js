@@ -322,7 +322,7 @@ export default function RaceDayPage() {
 
             {course && (
               <>
-                <div className="pace-grid" style={{ marginTop: 14, gridTemplateColumns: "repeat(4, 1fr)" }}>
+                <div className="pace-grid" style={{ marginTop: 14 }}>
                   <div className="pace-cell">
                     <div className="hint">Distance</div>
                     <div className="pace-time">{course.totalDistanceKm}km</div>
