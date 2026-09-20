@@ -284,6 +284,14 @@ export default function Dashboard() {
 
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
+  // /api/me already tells us (from the DB, not this page's own fetches)
+  // whether this athlete has activities — used below so a returning user
+  // with data never sees the "Getting started"/"Import" empty-state panels
+  // flash before loadActivitiesAndInsights() finishes and fills them in
+  // with the real dashboard. Only a genuinely new/empty account (or one
+  // Strava disconnected) falls through to those panels.
+  const hasKnownActivities = me.activityCount > 0;
+
   return (
     <div className="shell">
       <AppHeader
@@ -395,7 +403,7 @@ export default function Dashboard() {
         </div>
       )}
 
-      {activities.length === 0 && (
+      {!hasKnownActivities && activities.length === 0 && (
         <div className="panel">
           <h2>Getting started guide</h2>
           <div className="hint" style={{ marginTop: -8, marginBottom: 4 }}>
@@ -463,11 +471,15 @@ export default function Dashboard() {
         </div>
       )}
 
-      {me.stravaConnected && activities.length === 0 && !importing && (
+      {me.stravaConnected && !hasKnownActivities && activities.length === 0 && !importing && (
         <div className="panel">
           <h2>Import your activities</h2>
           <button className="primary" onClick={runImport}>Import last 30 activities</button>
         </div>
+      )}
+
+      {me.stravaConnected && hasKnownActivities && activities.length === 0 && !importing && (
+        <div className="panel"><div className="status-line">Loading your dashboard…</div></div>
       )}
 
       {importing && (

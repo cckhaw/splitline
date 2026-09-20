@@ -40,7 +40,7 @@ async function safeJson(res) {
 export default function TrainingPlanPage() {
   const router = useRouter();
   const [me, setMe] = useState(null);
-  const [goal, setGoal] = useState(null); // null = none set yet, undefined = loading
+  const [goal, setGoal] = useState(undefined); // undefined = loading, null = none set yet
   const [plan, setPlan] = useState(null);
   const [planError, setPlanError] = useState("");
   const [deviation, setDeviation] = useState(null);
@@ -174,7 +174,7 @@ export default function TrainingPlanPage() {
     setChangingEvent(false);
   }
 
-  if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
+  if (!me || goal === undefined) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
   const showForm = goal === null || changingEvent;
 
