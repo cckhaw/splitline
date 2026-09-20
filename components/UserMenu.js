@@ -16,7 +16,7 @@ const TIER_LABELS = { free: "Free", plus: "Plus", pro: "Pro" };
 // name (with their membership tier) opens a dropdown with the rest of
 // the account-level navigation, instead of spreading those links flat
 // across the header.
-export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, resyncing, ouraConnected, onOuraChange }) {
+export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, resyncing, stravaConnected, ouraConnected, onOuraChange }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(null);
@@ -133,9 +133,11 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, res
             </div>
           </div>
           <Link href="/account" onClick={() => setOpen(false)}>My account</Link>
-          <div className="user-menu-item" onClick={handleResync} style={resyncing ? { opacity: 0.6, cursor: "default" } : undefined}>
-            {resyncLabel}
-          </div>
+          {stravaConnected && (
+            <div className="user-menu-item" onClick={handleResync} style={resyncing ? { opacity: 0.6, cursor: "default" } : undefined}>
+              {resyncLabel}
+            </div>
+          )}
           {ouraConnected != null && (
             <div
               className="user-menu-item"

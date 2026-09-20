@@ -185,6 +185,7 @@ export default function TrainingPlanPage() {
         tier={me.tier}
         isTrial={me.isTrial}
         avatarUrl={me.avatarUrl}
+        stravaConnected={me.stravaConnected}
         ouraConnected={me.ouraConnected}
         onOuraChange={(connected) => setMe((m) => (m ? { ...m, ouraConnected: connected } : m))}
       />

@@ -293,6 +293,7 @@ export default function Dashboard() {
         avatarUrl={me.avatarUrl}
         onResync={runImport}
         resyncing={importing}
+        stravaConnected={me.stravaConnected}
         ouraConnected={me.ouraConnected}
         onOuraChange={(connected) => setMe((prev) => (prev ? { ...prev, ouraConnected: connected } : prev))}
       />
