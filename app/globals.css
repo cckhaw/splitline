@@ -16,6 +16,14 @@
   --teal: #0D9488;
   --amber: #F59E0B;
   --coral: #E11D48;
+  /* Fixed, theme-independent accents for the home page's hero mockup and
+     announcement bar — like .telemetry-card-mock below, these represent a
+     fixed marketing visual rather than the app's own light/dark surface,
+     so they don't get a dark-mode variant. */
+  --brand-cyan: #00E5FF;
+  --brand-black: #0D0E10;
+  --bg-light: #F8F9FA;
+  --card-dark: #121418;
   --radius: 3px;
   --font-head: -apple-system, BlinkMacSystemFont, Roboto, Oxygen, Ubuntu, Cantarell, 'Fira Sans', sans-serif;
   --font-mono: 'IBM Plex Mono', monospace;
@@ -40,6 +48,20 @@ html, body { margin: 0; background: var(--bg); color: var(--ink); }
 body { font-family: var(--font-head); -webkit-font-smoothing: antialiased; min-height: 100vh; transition: background 0.15s ease, color 0.15s ease; }
 
 .shell { max-width: 1180px; margin: 0 auto; padding: 28px 20px 60px; }
+
+/* Full-bleed marketing announcement bar — the classic "break out of the
+   centered container" trick, since .shell itself can't just go edge to
+   edge without losing its centered max-width for everything below it. */
+.announce-bar {
+  position: relative; left: 50%; right: 50%; margin: -28px -50vw 28px; width: 100vw;
+  background: var(--brand); color: #fff; text-align: center;
+  padding: 11px 16px; font-size: calc(12.5px * var(--fs-scale, 1));
+  font-weight: 700; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.announce-bar a { color: #fff; text-decoration: none; }
+.announce-bar a:hover { text-decoration: underline; }
+.announce-bar strong { font-weight: 800; }
+
 header.top { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 28px; flex-wrap: wrap; }
 .top-left { display: flex; align-items: center; gap: 28px; flex-wrap: wrap; }
 .wordmark { display: inline-flex; align-items: center; gap: 8px; font-weight: 700; font-size: calc(20px * var(--fs-scale, 1)); letter-spacing: -0.01em; color: inherit; text-decoration: none; }
@@ -211,6 +233,14 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 .navlinks a { color: var(--ink-dim); text-decoration: none; font-size: calc(14px * var(--fs-scale, 1)); }
 .navcta { width: auto; padding: 9px 18px; }
 .navcta.wide { padding: 13px 30px; font-size: calc(15px * var(--fs-scale, 1)); margin-top: 8px; }
+.hero-cta {
+  width: auto; border: none; border-radius: 999px; padding: 16px 34px; cursor: pointer;
+  font-size: calc(16px * var(--fs-scale, 1)); font-weight: 700; color: #10151f;
+  background: linear-gradient(135deg, var(--brand), #FFB35C);
+  box-shadow: 0 14px 34px -10px color-mix(in srgb, var(--brand) 65%, transparent);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+.hero-cta:hover { transform: translateY(-1px); box-shadow: 0 18px 40px -10px color-mix(in srgb, var(--brand) 75%, transparent); }
 .hero-grid { display: grid; grid-template-columns: 1fr; gap: 40px; align-items: center; padding: 60px 0 40px; }
 @media (min-width: 900px) { .hero-grid { grid-template-columns: 1.05fr 0.95fr; } }
 .hero { max-width: 640px; }
@@ -218,6 +248,57 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 .lede { font-size: calc(16px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.6; margin: 0 0 28px; max-width: 520px; }
 .hero-visual { display: flex; justify-content: center; }
 @media (max-width: 899px) { .hero-visual { order: -1; } }
+
+/* Layered hero showcase — a fixed off-white "product shot" background
+   (independent of the site's own light/dark toggle, same rationale as
+   .telemetry-card-mock below) with the phone-framed mockup centered and
+   two floating stat badges pulled from real dashboard numbers (acute
+   training load, gear wear) overlapping its edges. */
+.hero-showcase {
+  position: relative; display: flex; justify-content: center; align-items: center;
+  min-height: 460px; padding: 56px 40px; border-radius: calc(var(--radius) * 8);
+  background:
+    radial-gradient(ellipse 55% 45% at 28% 22%, color-mix(in srgb, var(--brand-black) 7%, transparent) 0%, transparent 70%),
+    radial-gradient(ellipse 50% 45% at 78% 82%, color-mix(in srgb, var(--brand-cyan) 12%, transparent) 0%, transparent 65%),
+    var(--bg-light);
+}
+.hero-phone {
+  position: relative; z-index: 2; padding: 16px 14px; border-radius: 36px;
+  background: linear-gradient(160deg, #1c1f26, var(--card-dark));
+  box-shadow: 0 34px 70px -22px rgba(13, 14, 16, 0.5), inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+.hero-phone-notch { width: 56px; height: 5px; border-radius: 4px; background: rgba(255,255,255,0.16); margin: 0 auto 12px; }
+.hero-phone .telemetry-card-mock { width: 240px; margin: 0; padding: 20px; transform: none; box-shadow: none; }
+.hero-phone .telemetry-card-mock:hover { transform: none; }
+.floating-badge {
+  position: absolute; z-index: 3; width: 156px; background: #FFFFFF; color: var(--brand-black);
+  border-radius: calc(var(--radius) * 4); padding: 11px 14px;
+  box-shadow: 0 20px 44px -14px rgba(13, 14, 16, 0.3), 0 0 0 1px rgba(13,14,16,0.06);
+}
+.floating-badge-label { display: block; font-size: calc(9.5px * var(--fs-scale, 1)); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: #6B6558; margin-bottom: 4px; }
+.floating-badge-value { font-family: var(--font-mono); font-size: calc(17px * var(--fs-scale, 1)); font-weight: 700; white-space: nowrap; }
+.floating-badge-value em { font-style: normal; font-size: calc(11px * var(--fs-scale, 1)); font-weight: 600; color: var(--teal); margin-left: 5px; }
+/* Positioned to clear the phone mockup's own footprint (it's ~270px
+   wide, centered in the showcase) rather than overlapping its screen
+   content — floating beside the top-left and bottom-right corners of
+   the "product shot," not on top of the readout. */
+.floating-badge.badge-left { top: 2%; left: -2%; }
+.floating-badge.badge-right { bottom: 4%; right: -2%; }
+@media (max-width: 899px) {
+  .floating-badge.badge-left { top: -14px; left: 0; }
+  .floating-badge.badge-right { bottom: -14px; right: 0; }
+}
+@media (max-width: 480px) {
+  .floating-badge { width: 138px; padding: 10px 12px; }
+}
+
+.trust-banner {
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 10px;
+  padding: 18px 16px; margin: 8px 0 0; border-top: 1px solid var(--line); border-bottom: 1px solid var(--line);
+  font-family: var(--font-mono); font-size: calc(11.5px * var(--fs-scale, 1)); font-weight: 500;
+  color: var(--ink-dim); text-transform: uppercase; letter-spacing: 0.04em; text-align: center;
+}
+.trust-banner .trust-sep { color: var(--line); }
 
 /* telemetry card mockup — a static preview of a real exported overlay
    card (see lib/svg.js), used for the hero visual and the feed mockup.
@@ -267,25 +348,17 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 .feed-mock-image { display: flex; justify-content: center; margin-bottom: 14px; }
 .feed-mock-actions { display: flex; gap: 16px; font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); border-top: 1px solid var(--line); padding-top: 10px; }
 
-.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 20px 0 60px; border-top: 1px solid var(--line); margin-top: 20px; }
+.features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px; padding: 20px 0 60px; border-top: 1px solid var(--line); margin-top: 20px; }
 @media (max-width: 860px) { .features { grid-template-columns: 1fr; } .hero h1 { font-size: calc(30px * var(--fs-scale, 1)); } }
-.feature h3 { font-size: calc(16px * var(--fs-scale, 1)); font-weight: 500; margin: 0 0 8px; color: var(--ink); }
-.feature p { font-size: calc(13.5px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.6; margin: 0; }
-.feature-badge {
-  display: inline-flex; align-items: center; gap: 6px; margin-top: 12px;
-  padding: 4px 10px; border-radius: 999px; font-family: var(--font-mono);
-  font-size: calc(11px * var(--fs-scale, 1)); font-weight: 600;
+.feature h3 {
+  font-size: calc(16px * var(--fs-scale, 1)); font-weight: 700; margin: 0 0 14px; color: var(--ink);
+  padding-bottom: 14px; border-bottom: 1px solid var(--line);
 }
-.feature-badge.cyan {
-  color: var(--brand-2); background: color-mix(in srgb, var(--brand-2) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--brand-2) 40%, transparent);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--brand-2) 35%, transparent);
+.feature p {
+  font-size: calc(13.5px * var(--fs-scale, 1)); color: var(--ink-dim); line-height: 1.6;
+  margin: 0 0 16px; padding-bottom: 16px; border-bottom: 1px solid var(--line);
 }
-.feature-badge.orange {
-  color: var(--brand); background: color-mix(in srgb, var(--brand) 12%, transparent);
-  border: 1px solid color-mix(in srgb, var(--brand) 40%, transparent);
-  box-shadow: 0 0 12px color-mix(in srgb, var(--brand) 35%, transparent);
-}
+.feature-visual { display: flex; }
 
 /* mobile-only nav-in-menu (components/MobileNavMenu.js) — at phone widths
    TopNav's Dashboard/Training row doesn't fit next to the wordmark without

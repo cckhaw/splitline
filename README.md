@@ -555,10 +555,21 @@ hardcoded.
 
 ### Marketing site
 
-The signed-out home page (`app/page.js`) has a two-column hero with a
-telemetry-card visual, a "see it land on your feed" social-proof mockup,
-a feature grid, and (when the beta trial is active) a promo banner —
-pricing itself lives on its own `/pricing` page rather than crowding the
+The signed-out home page (`app/page.js`) leads with a full-bleed
+announcement bar (the beta trial promo, when `NEXT_PUBLIC_BETA_PRO_TRIAL_DAYS`
+is active), then a two-column hero: headline/CTA on the left, and on the
+right a layered "product shot" — a phone-framed telemetry card mock
+(`components/TelemetryCardMock.js`) with two floating stat badges
+(acute training load, gear wear) pulled from real dashboard numbers,
+against a fixed off-white background independent of the site's own
+light/dark toggle (like the card mock itself, it represents a fixed
+marketing visual, not the app's surface). A thin trust banner below it
+calls out Strava/Oura/MCP support. Then a "see it land on your feed"
+social-proof mockup, and a three-column feature grid (Cockpit Telemetry
+Engine, Biomechanical Injury Shield, Autonomous Race Pacing) each with a
+small inline SVG echoing its real dashboard counterpart (the fatigue
+gauge's arc, the elevation-profile chart) rather than generic icons.
+Pricing itself lives on its own `/pricing` page rather than crowding the
 home page. All of it, plus every page behind login, shares one
 `<title>`/description pattern and one footer.
 
