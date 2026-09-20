@@ -14,6 +14,12 @@ const ERROR_MESSAGES = {
   access_denied: "Strava access wasn't granted, so there's nothing to import yet.",
 };
 
+const OURA_ERROR_MESSAGES = {
+  state_mismatch: "That connection attempt looked tampered with — try connecting again.",
+  token_exchange_failed: "Oura didn't accept that connection — try again.",
+  access_denied: "Oura access wasn't granted, so there's no sleep data to show yet.",
+};
+
 export default function Dashboard() {
   const router = useRouter();
   const [me, setMe] = useState(null); // null = loading
@@ -39,6 +45,9 @@ export default function Dashboard() {
   const [deviationActing, setDeviationActing] = useState(false);
   const [deviationActionError, setDeviationActionError] = useState("");
 
+  const [ouraConnecting, setOuraConnecting] = useState(false);
+  const [ouraDisconnecting, setOuraDisconnecting] = useState(false);
+
   const [theme, setTheme] = useState("ink");
   const [units, setUnits] = useState("metric");
 
@@ -59,6 +68,17 @@ export default function Dashboard() {
     if (err) {
       setStatusWarn(true);
       setStatus(ERROR_MESSAGES[err] || `Couldn't connect to Strava (${err}).`);
+      window.history.replaceState({}, "", "/app");
+    }
+    const ouraErr = params.get("oura_error");
+    if (ouraErr) {
+      setStatusWarn(true);
+      setStatus(OURA_ERROR_MESSAGES[ouraErr] || `Couldn't connect Oura Ring (${ouraErr}).`);
+      window.history.replaceState({}, "", "/app");
+    }
+    if (params.get("oura_connected") === "1") {
+      setStatusWarn(false);
+      setStatus("Oura Ring connected — re-sync from the menu to pull in your sleep data.");
       window.history.replaceState({}, "", "/app");
     }
     // "Re-sync from Strava" in the hamburger menu links here from other
@@ -91,6 +111,37 @@ export default function Dashboard() {
       setStatusWarn(true);
       setStatus(e.message);
       setConnecting(false);
+    }
+  }
+
+  async function handleConnectOura() {
+    setOuraConnecting(true);
+    setStatusWarn(false);
+    setStatus("");
+    try {
+      const res = await fetch("/api/oura/connect", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.message || "Couldn't start the Oura connection.");
+      window.location.href = data.authorizeUrl;
+    } catch (e) {
+      setStatusWarn(true);
+      setStatus(e.message);
+      setOuraConnecting(false);
+    }
+  }
+
+  async function handleDisconnectOura() {
+    setOuraDisconnecting(true);
+    try {
+      await fetch("/api/oura/disconnect", { method: "POST" });
+      setMe((prev) => (prev ? { ...prev, ouraConnected: false } : prev));
+      setStatus("Oura Ring disconnected.");
+      setStatusWarn(false);
+    } catch (e) {
+      setStatusWarn(true);
+      setStatus("Couldn't disconnect Oura Ring — try again.");
+    } finally {
+      setOuraDisconnecting(false);
     }
   }
 
@@ -309,6 +360,33 @@ export default function Dashboard() {
         </div>
       )}
 
+      {me.stravaConnected && (
+        <div className="panel" id="oura">
+          <h2>{me.ouraConnected ? "Oura Ring connected" : "Connect Oura Ring"}</h2>
+          {me.ouraConnected ? (
+            <>
+              <div className="hint">
+                Sleep, HRV, resting heart rate, and readiness now feed the Activity Summary and Overtraining
+                Shield panels below. Re-sync from the menu any time to pull in new nights.
+              </div>
+              <button style={{ width: "auto", padding: "7px 14px", marginTop: 10 }} onClick={handleDisconnectOura} disabled={ouraDisconnecting}>
+                {ouraDisconnecting ? "Disconnecting…" : "Disconnect Oura Ring"}
+              </button>
+            </>
+          ) : (
+            <>
+              <button className="primary" onClick={handleConnectOura} disabled={ouraConnecting}>
+                {ouraConnecting ? "Connecting…" : "Connect Oura Ring"}
+              </button>
+              <div className="hint">
+                Optional — adds real sleep stages, HRV, resting heart rate, and readiness to your Activity
+                Summary and Overtraining Shield panels, instead of training-load estimates alone.
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {activities.length === 0 && (
         <div className="panel">
           <h2>Getting started guide</h2>
@@ -335,7 +413,16 @@ export default function Dashboard() {
               <h4><span className="guide-card-icon">🛡️</span> Injury-risk &amp; overtraining shield</h4>
               <p>
                 Aerobic decoupling, cadence drift, and workload ramp feed an AI-read risk score, plus a
-                recovery plan and nutrition guidance — so overtraining shows up before an injury does.
+                recovery plan and nutrition guidance — so overtraining shows up before an injury does. Connect
+                an Oura Ring for real HRV, resting heart rate, and readiness to sharpen the read further.
+              </p>
+            </div>
+            <div className="guide-card">
+              <h4><span className="guide-card-icon">🌙</span> Activity Summary + sleep overlay</h4>
+              <p>
+                One infographic for your training period — total time, a fatigue read, and an intensity trend
+                — with an Oura-powered recovery trend alongside it once connected, so progress and recovery
+                sit side by side.
               </p>
             </div>
             <div className="guide-card">
@@ -425,8 +512,10 @@ export default function Dashboard() {
                   <ShareButton kind="biomechanical" payload={{ athleteName: me.name || me.email, insights }} />
                 </div>
                 <div className="hint" style={{ marginTop: 6 }}>
-                  Physics-based signals computed from your own activity streams — aerobic decoupling, cadence drift,
-                  and workload ramp — interpreted below into a risk read, recovery plan, and nutrition guidance.
+                  Physics-based signals from your own activity streams — aerobic decoupling, cadence drift, and
+                  workload ramp — combined with real sleep, HRV, resting heart rate, and readiness from your
+                  Oura Ring when connected, interpreted below into a risk read, recovery plan, and nutrition
+                  guidance. Recovery data outweighs training-load estimates alone whenever the two disagree.
                 </div>
 
                 {insights.biomechanics && (
@@ -457,6 +546,50 @@ export default function Dashboard() {
                   <div className="hint" style={{ marginTop: 8 }}>
                     Decoupling and cadence drift need sustained efforts (18+ minutes) with heart-rate plus pace, power,
                     or cadence data — none of your recent activities have enough of that yet.
+                  </div>
+                )}
+
+                {insights.sleepRecovery ? (
+                  <>
+                    <div className="pace-grid" style={{ marginTop: 10, gridTemplateColumns: "repeat(3, 1fr)" }}>
+                      <div className="pace-cell">
+                        <div className="hint">Avg HRV (7d)</div>
+                        <div className="pace-time">
+                          {insights.sleepRecovery.avgHrvMs != null ? `${insights.sleepRecovery.avgHrvMs}ms` : "—"}
+                          {insights.sleepRecovery.hrvTrendPct != null && (
+                            <span style={{ fontSize: "calc(13px * var(--fs-scale, 1))", color: insights.sleepRecovery.hrvTrendPct < 0 ? "var(--coral)" : "var(--teal)" }}>
+                              {" "}{insights.sleepRecovery.hrvTrendPct > 0 ? "+" : ""}{insights.sleepRecovery.hrvTrendPct}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="pace-cell">
+                        <div className="hint">Resting HR (7d)</div>
+                        <div className="pace-time">
+                          {insights.sleepRecovery.avgRestingHrBpm != null ? `${Math.round(insights.sleepRecovery.avgRestingHrBpm)}bpm` : "—"}
+                          {insights.sleepRecovery.restingHrTrendPct != null && (
+                            <span style={{ fontSize: "calc(13px * var(--fs-scale, 1))", color: insights.sleepRecovery.restingHrTrendPct > 0 ? "var(--coral)" : "var(--teal)" }}>
+                              {" "}{insights.sleepRecovery.restingHrTrendPct > 0 ? "+" : ""}{insights.sleepRecovery.restingHrTrendPct}%
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="pace-cell">
+                        <div className="hint">Readiness (7d avg)</div>
+                        <div className="pace-time">{insights.sleepRecovery.avgReadinessScore ?? "—"}</div>
+                      </div>
+                    </div>
+                    {insights.sleepRecovery.underRecoveryFlag && (
+                      <div className="status-line warn" style={{ marginTop: 10 }}>
+                        HRV down and resting heart rate up over the last week — a real under-recovery signal from
+                        your Oura Ring, not just a training-load estimate.
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="hint" style={{ marginTop: 10 }}>
+                    Connect an <a href="#oura">Oura Ring</a> above for real sleep, HRV, and readiness data here
+                    instead of training-load estimates alone.
                   </div>
                 )}
 
@@ -526,11 +659,13 @@ export default function Dashboard() {
             )}
 
             <div className="panel">
-              <h2 style={{ margin: 0 }}>Strava Summary</h2>
+              <h2 style={{ margin: 0 }}>Activity Summary</h2>
               <div className="hint" style={{ marginTop: 6, marginBottom: 12 }}>
-                One infographic for your last {activities.length} activities — total training time across the
-                period, a fatigue read on how recently and how hard you've been training, and an intensity trend
-                across the period. Weather/humidity aren't shown — Strava only occasionally records a device
+                One infographic for your last {activities.length} activities — total training time, a fatigue
+                read on how recently and how hard you've been training, and an intensity trend across the
+                period. Connect an <a href="#oura">Oura Ring</a> above to add a matching recovery trend —
+                sleep, HRV, resting heart rate, and readiness — right alongside it, so progress and recovery
+                sit side by side. Weather/humidity aren't shown — Strava only occasionally records a device
                 temperature, and there's no live weather source wired up.
                 {" "}<Link href="/activities">See each activity&rsquo;s own card — Last 30 Activities →</Link>
               </div>

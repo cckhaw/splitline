@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { getUserById, getStravaConnection, countActivitiesForUser, friendlyDbErrorMessage } from "@/lib/db";
+import { getUserById, getStravaConnection, getOuraConnection, countActivitiesForUser, friendlyDbErrorMessage } from "@/lib/db";
 import { resolveEffectiveTier, isTrialTier } from "@/lib/membership";
 
 export const runtime = "nodejs";
@@ -20,6 +20,7 @@ export async function GET(request) {
     if (!user) return NextResponse.json({ authenticated: false });
 
     const connection = await getStravaConnection(session.userId);
+    const ouraConnection = await getOuraConnection(session.userId);
     const activityCount = await countActivitiesForUser(session.userId);
 
     return NextResponse.json({
@@ -38,6 +39,7 @@ export async function GET(request) {
       hasStripeCustomer: Boolean(user?.stripe_customer_id),
       stravaConnected: Boolean(connection),
       usingOwnStravaApp: Boolean(connection?.ownClientId),
+      ouraConnected: Boolean(ouraConnection),
       activityCount,
     });
   } catch (e) {

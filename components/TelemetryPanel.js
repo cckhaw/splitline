@@ -41,10 +41,15 @@ export default function TelemetryPanel({ summary, theme, units }) {
   const trendMax = d.hasTrend ? Math.max(...d.trace) : 0;
   const trendRange = trendMax - trendMin || 1;
 
+  const recoveryMin = d.hasRecoveryTrend ? Math.min(...d.recoveryTrace) : 0;
+  const recoveryMax = d.hasRecoveryTrend ? Math.max(...d.recoveryTrace) : 0;
+  const recoveryRange = recoveryMax - recoveryMin || 1;
+  const recoveryColor = d.underRecoveryFlag ? critical : t.secondary;
+
   return (
     <div className="telemetry-panel" style={{ background: t.bg, color: t.ink, borderColor: t.line }}>
       <div className="telemetry-header">
-        <div className="telemetry-title" style={{ color: t.ink }}>Training summary</div>
+        <div className="telemetry-title" style={{ color: t.ink }}>Activity Summary</div>
         <div className="telemetry-period" style={{ color: t.dim }}>
           {d.periodFrom} – {d.periodTo} · {d.sampleSize} activities
         </div>
@@ -112,6 +117,54 @@ export default function TelemetryPanel({ summary, theme, units }) {
           <div className="telemetry-caption" style={{ color: t.dim }}>Import a few more activities to see a trend here</div>
         )}
       </div>
+
+      {d.ouraConnected ? (
+        <>
+          {d.recoveryTiles.length > 0 && (
+            <div className="telemetry-tiles" style={{ marginTop: 4 }}>
+              {d.recoveryTiles.map((s) => (
+                <div key={s.label} className="telemetry-tile" style={{ borderColor: t.line }}>
+                  <div className="telemetry-label" style={{ color: t.dim }}>{s.label}</div>
+                  <div className="telemetry-tile-value" style={{ color: t.ink }}>
+                    {s.value}<span style={{ color: t.dim }}>{s.unit}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="telemetry-trend">
+            <div className="telemetry-label" style={{ color: t.dim }}>Recovery across the period (daily readiness)</div>
+            {d.hasRecoveryTrend ? (
+              <div className="telemetry-trend-bars">
+                {d.recoveryTrace.map((v, i) => {
+                  const isLast = i === d.recoveryTrace.length - 1;
+                  const pct = Math.max(6, ((v - recoveryMin) / recoveryRange) * 100);
+                  return (
+                    <div
+                      key={i}
+                      className="telemetry-trend-bar"
+                      style={{ height: `${pct}%`, background: isLast ? recoveryColor : t.secondary, opacity: isLast ? 1 : 0.45 }}
+                    />
+                  );
+                })}
+              </div>
+            ) : (
+              <div className="telemetry-caption" style={{ color: t.dim }}>Not enough nights synced yet to show a recovery trend</div>
+            )}
+            {d.readinessLabel && (
+              <div className="telemetry-caption" style={{ color: d.underRecoveryFlag ? critical : t.dim, marginTop: 4 }}>
+                {d.readinessLabel}{d.underRecoveryFlag ? " — HRV down and resting HR up this week, a real under-recovery signal" : ""}
+              </div>
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="telemetry-trend">
+          <div className="telemetry-caption" style={{ color: t.dim }}>
+            Connect an Oura Ring from the dashboard to see sleep, HRV, and readiness here too.
+          </div>
+        </div>
+      )}
 
       <div className="telemetry-footer" style={{ color: t.dim, borderColor: t.line }}>
         <span>SPLITLINE</span>

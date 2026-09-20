@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { getActivitiesForUser, friendlyDbErrorMessage } from "@/lib/db";
+import { getActivitiesForUser, getOuraConnection, getOuraMetricsForUser, friendlyDbErrorMessage } from "@/lib/db";
 import { buildTelemetrySummary } from "@/lib/telemetrySummary";
 import { buildTelemetrySummarySvg } from "@/lib/telemetrySummarySvg";
 import { svgToPng } from "@/lib/renderPng";
@@ -19,7 +19,19 @@ export async function POST(request) {
     if (!activities.length) {
       return NextResponse.json({ error: "no_data", message: "Import activities first." }, { status: 400 });
     }
-    const summary = buildTelemetrySummary(activities);
+
+    let sleepMetrics = [];
+    try {
+      const ouraConnection = await getOuraConnection(session.userId);
+      if (ouraConnection) {
+        const earliest = activities.reduce((min, a) => (new Date(a.startDate) < new Date(min.startDate) ? a : min));
+        sleepMetrics = await getOuraMetricsForUser(session.userId, new Date(earliest.startDate).toISOString().slice(0, 10));
+      }
+    } catch (e) {
+      console.error("Failed to load Oura sleep metrics for telemetry summary:", e);
+    }
+
+    const summary = buildTelemetrySummary(activities, new Date(), sleepMetrics);
 
     if (format === "json") {
       return NextResponse.json({ summary });

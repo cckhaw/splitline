@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getSessionUser } from "@/lib/authGuard";
-import { getActivitiesForUser, getUserById, getAiInsights, saveAiInsights, getAiUsage, recordAiUsage, friendlyDbErrorMessage } from "@/lib/db";
+import { getActivitiesForUser, getUserById, getOuraConnection, getOuraMetricsForUser, getAiInsights, saveAiInsights, getAiUsage, recordAiUsage, friendlyDbErrorMessage } from "@/lib/db";
 import { computeTrainingLoad, predictRacePaces, buildActivitySummary } from "@/lib/insights";
 import { generateHealthAnalysis } from "@/lib/anthropic";
 import { resolveEffectiveTier, isRefreshEligible, nextEligibleDate } from "@/lib/membership";
@@ -31,8 +31,26 @@ export async function GET(request) {
     return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });
   }
 
+  // Same period the Activity Summary panel shows: from the earliest of
+  // the last 30 activities through today. A missing connection or a
+  // fetch failure here just means sleepMetrics stays empty — the
+  // Overtraining Shield still works from training-load signals alone,
+  // same as before this feature existed.
+  let sleepMetrics = [];
+  if (activities.length) {
+    try {
+      const ouraConnection = await getOuraConnection(session.userId);
+      if (ouraConnection) {
+        const earliest = activities.reduce((min, a) => (new Date(a.startDate) < new Date(min.startDate) ? a : min));
+        sleepMetrics = await getOuraMetricsForUser(session.userId, new Date(earliest.startDate).toISOString().slice(0, 10));
+      }
+    } catch (e) {
+      console.error("Failed to load Oura sleep metrics for insights:", e);
+    }
+  }
+
   const tier = resolveEffectiveTier(user);
-  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date });
+  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, new Date(), sleepMetrics);
   const response = {
     load: computeTrainingLoad(activities),
     pace: predictRacePaces(activities),
@@ -40,6 +58,7 @@ export async function GET(request) {
     ageYears: summary.ageYears,
     ageSource: summary.ageSource,
     biomechanics: summary.biomechanics,
+    sleepRecovery: summary.sleepRecovery,
     tier,
   };
 
