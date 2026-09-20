@@ -115,10 +115,18 @@ updates that page's own view of the connection immediately. On narrow
 screens the same content collapses into a hamburger menu with an
 accordion for Dashboard/Training (`components/MobileNavMenu.js`).
 
-**Re-sync from Strava** is the one action that refreshes everything:
-it re-imports up to 30 activities, then re-fetches the Overtraining
-Shield panel, the Activity Summary infographic, an Oura Ring sync when
-one is connected (see "Oura Ring sleep and recovery data" below), and —
+**Re-sync from Strava** is the one action that refreshes everything.
+The first import pulls the last 30 activities; every re-sync after that
+only asks Strava for activities newer than the most recent one already
+imported (`after`, an epoch-timestamp filter on `/athlete/activities`)
+instead of re-listing — and then re-fetching detail+streams for — up to
+30 activities all over again. Rows accumulate in the `activities` table
+rather than staying capped at 30; every panel that reads "the last 30"
+still does (`getActivitiesForUser`'s own `LIMIT`), so nothing about what
+you see changes, only how much redundant work a re-sync does to get
+there. A re-sync also re-fetches the Overtraining Shield panel, the
+Activity Summary infographic, an Oura Ring sync when one is connected
+(see "Oura Ring sleep and recovery data" below), and —
 if there's a saved training plan — checks it for deviation and
 regenerates/adjusts the plan's guidance around the freshest activity
 *and* recovery data (see "Comparing actual training against the plan"
@@ -237,16 +245,20 @@ hamburger menu (`components/UserMenu.js`) rather than as a permanent
 
 Every **Re-sync from Strava** that completes with a connected Oura Ring
 also pulls sleep data (`fetchDailyMetrics`, merging Oura's `/sleep`,
-`/daily_sleep`, and `/daily_readiness` endpoints) for the exact date
-range Splitline already uses for the rest of the dashboard — from the
-day of the earliest of the athlete's last 30 Strava activities through
-today — and caches one row per night (`oura_daily_metrics`): total/deep/
-REM/light sleep, sleep efficiency, average HRV, resting heart rate,
-sleep score, and readiness score. This piggybacks on the existing sync
-action rather than adding a separate button, and is entirely
-best-effort — any failure (no connection, a network error, an API
-error) is logged and skipped, and never blocks or fails the Strava
-import itself.
+`/daily_sleep`, and `/daily_readiness` endpoints) and caches one row per
+night (`oura_daily_metrics`): total/deep/REM/light sleep, sleep
+efficiency, average HRV, resting heart rate, sleep score, and readiness
+score. The first sync (or the first one after reconnecting) covers the
+full date range Splitline shows on the dashboard — from the day of the
+earliest of the athlete's last 30 Strava activities through today —
+but every sync after that only re-requests from a few days before the
+latest already-cached night (`getLatestOuraDay`) instead of the whole
+window again; the small overlap re-covers the last few days in case
+Oura's own sleep/readiness scores were still settling when they were
+first fetched. This piggybacks on the existing sync action rather than
+adding a separate button, and is entirely best-effort — any failure (no
+connection, a network error, an API error) is logged and skipped, and
+never blocks or fails the Strava import itself.
 
 `lib/sleepRecovery.js` turns the cached nights into the numbers the
 Activity Summary and Overtraining Shield panels actually show: 7-day
@@ -586,9 +598,13 @@ this build.
 
 The actual reason "bring your own app" is useful is **rate limits**:
 Strava's default app-wide limit is 100 requests/15min and 1000/day, and
-importing 30 activities costs ~60 calls per user (2 per activity). One
-shared app serving many people will hit that ceiling well before any
-one user does. Two ways to handle it as you grow:
+the *first* import costs ~60 calls per user (2 per activity, for 30
+activities) — every re-sync after that only costs 2 calls per activity
+actually new since the last sync (see "Re-sync from Strava" above), so
+a returning user's ongoing usage is far cheaper than that first import.
+One shared app serving many people will still hit that ceiling well
+before any one user does, especially during a burst of first-time
+signups. Two ways to handle it as you grow:
 
 - **Request a rate limit increase** from Strava once you have real
   usage (there's a request form linked from your app's settings page)
