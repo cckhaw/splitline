@@ -35,6 +35,7 @@ export default function Dashboard() {
 
   const [importing, setImporting] = useState(false);
   const [importProgress, setImportProgress] = useState(0);
+  const [deltaSync, setDeltaSync] = useState(false); // true once a re-sync's page-1 response confirms it's fetching only new activities, not the initial 30
 
   const [activities, setActivities] = useState([]);
   const [summaryData, setSummaryData] = useState(null);
@@ -152,25 +153,34 @@ export default function Dashboard() {
   async function runImport() {
     setImporting(true);
     setImportProgress(0);
+    setDeltaSync(false);
     setStatusWarn(false);
     let page = 1;
+    let afterEpoch = null; // set by the server's page-1 response — a re-sync only fetches activities newer than this, so it's echoed back on every subsequent page instead of recomputed (see app/api/import/route.js)
     let done = false;
     let total = 0;
+    let imported = 0;
     try {
-      while (!done && page <= 6) {
+      // A re-sync's delta isn't capped at 30 like the initial import is —
+      // this is just a generous safety bound on how many pages one import
+      // run will fetch, with `done` (from the server) as the real signal.
+      while (!done && page <= 40) {
         const res = await fetch("/api/import", {
           method: "POST",
           headers: { "content-type": "application/json" },
-          body: JSON.stringify({ page }),
+          body: JSON.stringify({ page, afterEpoch }),
         });
         const data = await res.json();
         if (!res.ok) throw new Error(data.message || "Import failed partway through.");
         total = data.total;
+        imported += data.imported || 0;
         done = data.done;
-        setImportProgress(Math.min(total, 30));
+        afterEpoch = data.afterEpoch ?? afterEpoch;
+        if (page === 1 && afterEpoch != null) setDeltaSync(true);
+        setImportProgress(afterEpoch != null ? imported : Math.min(total, 30));
         page = data.nextPage;
       }
-      setStatus(`Imported ${total} activities.`);
+      setStatus(afterEpoch != null ? `Synced ${imported} new activit${imported === 1 ? "y" : "ies"}.` : `Imported ${total} activities.`);
       await loadActivitiesAndInsights();
     } catch (e) {
       setStatusWarn(true);
@@ -484,9 +494,15 @@ export default function Dashboard() {
 
       {importing && (
         <div className="panel">
-          <h2>Importing…</h2>
-          <div className="progress-track"><div className="progress-fill" style={{ width: `${(importProgress / 30) * 100}%` }} /></div>
-          <div className="hint">{importProgress} of up to 30 activities</div>
+          <h2>{deltaSync ? "Syncing new activities…" : "Importing…"}</h2>
+          {deltaSync ? (
+            <div className="hint">{importProgress} new activit{importProgress === 1 ? "y" : "ies"} found so far</div>
+          ) : (
+            <>
+              <div className="progress-track"><div className="progress-fill" style={{ width: `${(importProgress / 30) * 100}%` }} /></div>
+              <div className="hint">{importProgress} of up to 30 activities</div>
+            </>
+          )}
         </div>
       )}
 
