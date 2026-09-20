@@ -1,5 +1,5 @@
 import Link from "next/link";
-import ThemeToggle from "@/components/ThemeToggle";
+import PublicNav from "@/components/PublicNav";
 import SiteFooter from "@/components/SiteFooter";
 import TelemetryCardMock from "@/components/TelemetryCardMock";
 import { BETA_PRO_TRIAL_DAYS } from "@/lib/membership";
@@ -72,12 +72,7 @@ export default function Home() {
           <img src="/logo.png" alt="" width={26} height={26} />
           <span className="split">SPLIT</span><span className="line">LINE</span>
         </div>
-        <nav className="navlinks">
-          <Link href="#features">Features</Link>
-          <Link href="/pricing">Pricing</Link>
-          <ThemeToggle />
-          <Link href="/login">Log in</Link>
-        </nav>
+        <PublicNav links={[{ href: "#features", label: "Features" }, { href: "/pricing", label: "Pricing" }]} />
       </header>
 
       <section className="hero-grid">
