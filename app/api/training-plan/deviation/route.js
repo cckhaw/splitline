@@ -4,7 +4,7 @@ import { getSessionUser } from "@/lib/authGuard";
 import {
   getActivitiesForUser, getUserById, getRaceGoal, getTrainingPlan, saveTrainingPlan,
   getTrainingPlanDeviation, saveTrainingPlanDeviation, setTrainingPlanDeviationStatus,
-  getAiUsage, recordAiUsage, friendlyDbErrorMessage,
+  getSleepMetricsForActivities, getAiUsage, recordAiUsage, friendlyDbErrorMessage,
 } from "@/lib/db";
 import { buildActivitySummary } from "@/lib/insights";
 import { buildWeeklyActuals } from "@/lib/trainingPlanDeviation";
@@ -74,8 +74,9 @@ export async function GET(request) {
   if (!activitiesSincePlan.length) return NextResponse.json({ active: false, reason: "no_new_activity" });
 
   const weeklyActuals = buildWeeklyActuals(activitiesSincePlan, planGeneratedAt, now);
-  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now);
-  const inputHash = hashInput({ planInputHash: cachedPlan.input_hash, weeklyActuals, weeksSincePlan });
+  const sleepMetrics = await getSleepMetricsForActivities(session.userId, activities);
+  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now, sleepMetrics);
+  const inputHash = hashInput({ planInputHash: cachedPlan.input_hash, weeklyActuals, weeksSincePlan, sleepRecovery: summary.sleepRecovery });
 
   let existing = null;
   try {
@@ -110,6 +111,7 @@ export async function GET(request) {
     recent_30day_weekly_distance_km: summary.weeklyDistanceKm,
     biomechanics: summary.biomechanics,
     training_load: summary.trainingLoad,
+    sleep_recovery: summary.sleepRecovery,
   };
 
   try {
@@ -163,7 +165,8 @@ export async function POST(request) {
   }
 
   const now = new Date();
-  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now);
+  const sleepMetrics = await getSleepMetricsForActivities(session.userId, activities);
+  const summary = buildActivitySummary(activities, { birthDate: user?.birth_date }, now, sleepMetrics);
   const eventInfo = buildEventInfo(goal, now);
   const tier = resolveEffectiveTier(user);
 

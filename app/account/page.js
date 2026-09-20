@@ -305,7 +305,14 @@ export default function AccountPage() {
 
   return (
     <div className="shell">
-      <AppHeader name={me.name || me.email} tier={me.tier} isTrial={me.isTrial} avatarUrl={me.avatarUrl} />
+      <AppHeader
+        name={me.name || me.email}
+        tier={me.tier}
+        isTrial={me.isTrial}
+        avatarUrl={me.avatarUrl}
+        ouraConnected={me.ouraConnected}
+        onOuraChange={(connected) => setMe((m) => (m ? { ...m, ouraConnected: connected } : m))}
+      />
 
       <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 18 }}>My account</h2>
 
