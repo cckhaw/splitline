@@ -542,6 +542,37 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 .admin-table td { padding: 10px; border-bottom: 1px solid var(--line); color: var(--ink); }
 .admin-table tr:hover td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
 .admin-table a { text-decoration: none; color: var(--brand); }
+.admin-mobile-sort { display: none; margin-top: 10px; }
+
+/* Below the mobile nav breakpoint the 6-column table can't fit the screen
+   width without horizontal scroll, so it collapses into stacked cards (one
+   per user) with each cell labelled via data-label; column-header sorting
+   isn't reachable once headers are hidden, so a dedicated sort-by control
+   (admin-mobile-sort) takes over there instead. */
+@media (max-width: 640px) {
+  .admin-table-toolbar { flex-direction: column; align-items: stretch; }
+  .admin-search-input { max-width: none !important; width: 100%; }
+  .admin-page-size { justify-content: space-between; }
+  .admin-mobile-sort { display: flex; }
+
+  .admin-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  .admin-table, .admin-table tbody, .admin-table tr, .admin-table td { display: block; width: 100%; }
+  .admin-table tr {
+    margin-top: 12px; border: 1px solid var(--line); border-radius: var(--radius); padding: 4px 12px;
+  }
+  .admin-table tr:first-child { margin-top: 0; }
+  .admin-table td {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    text-align: right; border-bottom: 1px solid var(--line);
+  }
+  .admin-table td:last-child { border-bottom: none; }
+  .admin-table td::before {
+    content: attr(data-label); text-align: left; font-weight: 500; color: var(--ink-dim);
+    font-size: calc(11.5px * var(--fs-scale, 1)); text-transform: uppercase; letter-spacing: 0.02em;
+  }
+  .admin-table td[colspan] { display: block; text-align: left; }
+  .admin-table td[colspan]::before { content: none; }
+}
 .admin-tier-badge { display: inline-block; padding: 2px 8px; border-radius: 10px; font-size: calc(11px * var(--fs-scale, 1)); font-weight: 600; text-transform: uppercase; }
 .admin-tier-badge.free { background: color-mix(in srgb, var(--ink-dim) 18%, transparent); color: var(--ink-dim); }
 .admin-tier-badge.plus { background: color-mix(in srgb, var(--brand2) 18%, transparent); color: var(--brand2); }
