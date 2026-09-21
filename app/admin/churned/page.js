@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AdminBarList from "@/components/AdminBarList";
+import AdminBrand from "@/components/AdminBrand";
 import { eventLabel } from "@/lib/adminEvents";
 
 function fmtDate(d) {
@@ -130,9 +131,7 @@ export default function ChurnedUsersPage() {
   return (
     <div className="shell">
       <div className="admin-top">
-        <span className="wordmark" style={{ cursor: "default" }}>
-          <span className="split">ADMIN</span>
-        </span>
+        <AdminBrand />
         <Link href="/admin">Back to dashboard</Link>
       </div>
 

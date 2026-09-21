@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import AdminBarList from "@/components/AdminBarList";
+import AdminBrand from "@/components/AdminBrand";
 import { eventLabel } from "@/lib/adminEvents";
 
 const DEVICE_COLORS = { desktop: "var(--brand2)", mobile: "var(--brand)", tablet: "var(--teal)" };
@@ -78,7 +79,7 @@ export default function AdminDashboardPage() {
 
   async function handleLogout() {
     await fetch("/api/admin/logout", { method: "POST" });
-    router.push("/admin/login");
+    router.push("/");
   }
 
   function toggleUserSort(key) {
@@ -121,9 +122,7 @@ export default function AdminDashboardPage() {
   return (
     <div className="shell">
       <div className="admin-top">
-        <span className="wordmark" style={{ cursor: "default" }}>
-          <span className="split">ADMIN</span>
-        </span>
+        <AdminBrand />
         <button onClick={handleLogout} style={{ width: "auto", padding: "7px 14px" }}>Log out</button>
       </div>
 
