@@ -209,6 +209,7 @@ export default function AdminDashboardPage() {
                 placeholder="Search name or email…"
                 value={userSearch}
                 onChange={(e) => changeUserSearch(e.target.value)}
+                className="admin-search-input"
                 style={{ maxWidth: 280 }}
               />
               <label className="admin-page-size">
@@ -221,6 +222,26 @@ export default function AdminDashboardPage() {
                 per page
               </label>
             </div>
+
+            <label className="admin-page-size admin-mobile-sort">
+              Sort by
+              <select
+                value={userSortKey}
+                onChange={(e) => { setUserSortKey(e.target.value); setUserPage(1); }}
+                style={{ width: "auto" }}
+              >
+                {SORTABLE_COLUMNS.map((col) => (
+                  <option key={col.key} value={col.key}>{col.label}</option>
+                ))}
+              </select>
+              <button
+                type="button"
+                style={{ width: "auto", padding: "6px 10px" }}
+                onClick={() => setUserSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+              >
+                {userSortDir === "asc" ? "▲ Asc" : "▼ Desc"}
+              </button>
+            </label>
 
             <table className="admin-table">
               <thead>
@@ -236,15 +257,15 @@ export default function AdminDashboardPage() {
               <tbody>
                 {pagedUsers.map((u) => (
                   <tr key={u.id}>
-                    <td><Link href={`/admin/users/${u.id}`}>{u.name || "—"}</Link></td>
-                    <td>{u.email}</td>
-                    <td>
+                    <td data-label="Name"><Link href={`/admin/users/${u.id}`}>{u.name || "—"}</Link></td>
+                    <td data-label="Email">{u.email}</td>
+                    <td data-label="Tier">
                       <span className={`admin-tier-badge ${u.tier}`}>{u.tier}</span>
                       {u.isTrial && " (trial)"}
                     </td>
-                    <td>{u.activityCount}</td>
-                    <td>{fmtDate(u.createdAt)}</td>
-                    <td>{u.lastActiveAt ? fmtDateTime(u.lastActiveAt) : "never"}</td>
+                    <td data-label="Activities">{u.activityCount}</td>
+                    <td data-label="Joined">{fmtDate(u.createdAt)}</td>
+                    <td data-label="Last active">{u.lastActiveAt ? fmtDateTime(u.lastActiveAt) : "never"}</td>
                   </tr>
                 ))}
                 {sortedUsers.length === 0 && (
