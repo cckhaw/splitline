@@ -215,7 +215,7 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 .canvas-wrap { display: flex; align-items: center; justify-content: center; background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; min-height: 420px; }
 .canvas-wrap img { width: 100%; max-width: 420px; height: auto; border-radius: 2px; box-shadow: 0 20px 60px rgba(0,0,0,0.45); }
 
-/* per-activity card gallery — app/activities/page.js ("Last 30 Activities") */
+/* per-activity card gallery — app/activities/page.js ("Activities") */
 .gallery { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 18px; margin-top: 18px; }
 .gallery-card { background: var(--bg-raised); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .gallery-card img { width: 100%; display: block; }
@@ -224,6 +224,20 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 .gallery-card-actions { display: flex; gap: 8px; }
 .gallery-card-actions button { flex: 1; padding: 6px 8px; }
 .gallery-card-hint { color: var(--ink-dim); line-height: 1.4; }
+
+/* Fixed 3-column layout (a 3x2 grid at the page's own PAGE_SIZE=6) rather
+   than .gallery's auto-fill columns, so a paginated page always reads as
+   the same shape regardless of how many cards happen to be on it. */
+.gallery-3x2 { grid-template-columns: repeat(3, 1fr); }
+@media (max-width: 860px) { .gallery-3x2 { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .gallery-3x2 { grid-template-columns: 1fr; } }
+
+.activities-filter-row { display: flex; align-items: flex-end; gap: 14px; flex-wrap: wrap; }
+.activities-filter-field { display: flex; flex-direction: column; gap: 4px; font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); }
+.activities-filter-field input { width: auto; }
+.activities-pagination {
+  display: flex; align-items: center; justify-content: center; gap: 16px; margin-top: 20px; flex-wrap: wrap;
+}
 
 .hint { font-size: calc(12px * var(--fs-scale, 1)); color: var(--ink-dim); margin-top: 8px; line-height: 1.5; }
 .hint a { color: var(--brand); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--brand) 40%, transparent); }
@@ -515,11 +529,16 @@ input::placeholder, textarea::placeholder { color: var(--ink-dim); }
 .admin-bar-fill { height: 100%; border-radius: 4px; }
 .admin-bar-row .count { text-align: right; font-family: var(--font-mono); color: var(--ink-dim); }
 
+.admin-table-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap; margin-top: 10px; }
+.admin-page-size { display: flex; align-items: center; gap: 8px; font-size: calc(12.5px * var(--fs-scale, 1)); color: var(--ink-dim); white-space: nowrap; }
 .admin-table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: calc(13px * var(--fs-scale, 1)); }
 .admin-table th {
   text-align: left; padding: 8px 10px; color: var(--ink-dim); font-weight: 500; border-bottom: 1px solid var(--line);
   font-size: calc(11.5px * var(--fs-scale, 1)); text-transform: uppercase; letter-spacing: 0.02em;
 }
+.admin-table th.admin-table-sortable { cursor: pointer; user-select: none; white-space: nowrap; }
+.admin-table th.admin-table-sortable:hover { color: var(--ink); }
+.admin-sort-arrow { color: var(--brand); font-size: calc(9px * var(--fs-scale, 1)); }
 .admin-table td { padding: 10px; border-bottom: 1px solid var(--line); color: var(--ink); }
 .admin-table tr:hover td { background: color-mix(in srgb, var(--brand) 6%, transparent); }
 .admin-table a { text-decoration: none; color: var(--brand); }

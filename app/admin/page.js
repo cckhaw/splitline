@@ -19,12 +19,42 @@ function fmtDateTime(d) {
   return new Date(d).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
 }
 
+const SORTABLE_COLUMNS = [
+  { key: "name", label: "Name" },
+  { key: "email", label: "Email" },
+  { key: "tier", label: "Tier" },
+  { key: "activityCount", label: "Activities" },
+  { key: "createdAt", label: "Joined" },
+  { key: "lastActiveAt", label: "Last active" },
+];
+
+function compareUsers(a, b, key, dir) {
+  let av = a[key];
+  let bv = b[key];
+  // Nulls (mainly lastActiveAt: "never") always sort to the end, in
+  // either direction — a null isn't meaningfully "less" or "greater",
+  // it's "no value to rank by."
+  if (av == null && bv == null) return 0;
+  if (av == null) return 1;
+  if (bv == null) return -1;
+  if (key === "createdAt" || key === "lastActiveAt") { av = new Date(av).getTime(); bv = new Date(bv).getTime(); }
+  else if (typeof av === "string") { av = av.toLowerCase(); bv = String(bv).toLowerCase(); }
+  const cmp = av < bv ? -1 : av > bv ? 1 : 0;
+  return dir === "asc" ? cmp : -cmp;
+}
+
 export default function AdminDashboardPage() {
   const router = useRouter();
   const [ready, setReady] = useState(false);
   const [overview, setOverview] = useState(null);
   const [users, setUsers] = useState(null);
   const [error, setError] = useState("");
+
+  const [userSearch, setUserSearch] = useState("");
+  const [userPageSize, setUserPageSize] = useState(10);
+  const [userPage, setUserPage] = useState(1);
+  const [userSortKey, setUserSortKey] = useState("createdAt");
+  const [userSortDir, setUserSortDir] = useState("desc");
 
   useEffect(() => {
     fetch("/api/admin/me").then((r) => r.json()).then((data) => {
@@ -51,10 +81,42 @@ export default function AdminDashboardPage() {
     router.push("/admin/login");
   }
 
+  function toggleUserSort(key) {
+    if (userSortKey === key) {
+      setUserSortDir((d) => (d === "asc" ? "desc" : "asc"));
+    } else {
+      setUserSortKey(key);
+      setUserSortDir("asc");
+    }
+    setUserPage(1);
+  }
+
+  function changeUserSearch(value) {
+    setUserSearch(value);
+    setUserPage(1);
+  }
+
+  function changeUserPageSize(value) {
+    setUserPageSize(value);
+    setUserPage(1);
+  }
+
   if (!ready) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
   const eventTotalsData = overview ? Object.fromEntries(overview.eventTotals.map((r) => [r.event_type, r.n])) : {};
   const eventLabels = overview ? Object.fromEntries(overview.eventTotals.map((r) => [r.event_type, eventLabel(r.event_type)])) : {};
+
+  // Search + sort operate on the full user list before pagination slices
+  // it — so sorting (and the page-size choice) stays correct "across all
+  // pages" rather than each page just being independently re-sorted.
+  const needle = userSearch.trim().toLowerCase();
+  const filteredUsers = users
+    ? users.filter((u) => !needle || (u.name || "").toLowerCase().includes(needle) || u.email.toLowerCase().includes(needle))
+    : [];
+  const sortedUsers = [...filteredUsers].sort((a, b) => compareUsers(a, b, userSortKey, userSortDir));
+  const userTotalPages = Math.max(1, Math.ceil(sortedUsers.length / userPageSize));
+  const userPageClamped = Math.min(userPage, userTotalPages);
+  const pagedUsers = sortedUsers.slice((userPageClamped - 1) * userPageSize, userPageClamped * userPageSize);
 
   return (
     <div className="shell">
@@ -140,36 +202,79 @@ export default function AdminDashboardPage() {
         {!users ? (
           <div className="hint">Loading…</div>
         ) : (
-          <table className="admin-table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Email</th>
-                <th>Tier</th>
-                <th>Activities</th>
-                <th>Joined</th>
-                <th>Last active</th>
-              </tr>
-            </thead>
-            <tbody>
-              {users.map((u) => (
-                <tr key={u.id}>
-                  <td><Link href={`/admin/users/${u.id}`}>{u.name || "—"}</Link></td>
-                  <td>{u.email}</td>
-                  <td>
-                    <span className={`admin-tier-badge ${u.tier}`}>{u.tier}</span>
-                    {u.isTrial && " (trial)"}
-                  </td>
-                  <td>{u.activityCount}</td>
-                  <td>{fmtDate(u.createdAt)}</td>
-                  <td>{u.lastActiveAt ? fmtDateTime(u.lastActiveAt) : "never"}</td>
+          <>
+            <div className="admin-table-toolbar">
+              <input
+                type="text"
+                placeholder="Search name or email…"
+                value={userSearch}
+                onChange={(e) => changeUserSearch(e.target.value)}
+                style={{ maxWidth: 280 }}
+              />
+              <label className="admin-page-size">
+                Show
+                <select value={userPageSize} onChange={(e) => changeUserPageSize(Number(e.target.value))} style={{ width: "auto" }}>
+                  <option value={10}>10</option>
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                </select>
+                per page
+              </label>
+            </div>
+
+            <table className="admin-table">
+              <thead>
+                <tr>
+                  {SORTABLE_COLUMNS.map((col) => (
+                    <th key={col.key} className="admin-table-sortable" onClick={() => toggleUserSort(col.key)}>
+                      {col.label}
+                      {userSortKey === col.key && <span className="admin-sort-arrow">{userSortDir === "asc" ? " ▲" : " ▼"}</span>}
+                    </th>
+                  ))}
                 </tr>
-              ))}
-              {users.length === 0 && (
-                <tr><td colSpan={6} className="hint">No users yet.</td></tr>
-              )}
-            </tbody>
-          </table>
+              </thead>
+              <tbody>
+                {pagedUsers.map((u) => (
+                  <tr key={u.id}>
+                    <td><Link href={`/admin/users/${u.id}`}>{u.name || "—"}</Link></td>
+                    <td>{u.email}</td>
+                    <td>
+                      <span className={`admin-tier-badge ${u.tier}`}>{u.tier}</span>
+                      {u.isTrial && " (trial)"}
+                    </td>
+                    <td>{u.activityCount}</td>
+                    <td>{fmtDate(u.createdAt)}</td>
+                    <td>{u.lastActiveAt ? fmtDateTime(u.lastActiveAt) : "never"}</td>
+                  </tr>
+                ))}
+                {sortedUsers.length === 0 && (
+                  <tr><td colSpan={6} className="hint">{needle ? "No users match that search." : "No users yet."}</td></tr>
+                )}
+              </tbody>
+            </table>
+
+            {sortedUsers.length > 0 && (
+              <div className="activities-pagination">
+                <button
+                  style={{ width: "auto", padding: "7px 14px" }}
+                  onClick={() => setUserPage(Math.max(1, userPageClamped - 1))}
+                  disabled={userPageClamped <= 1}
+                >
+                  ← Previous
+                </button>
+                <span className="hint" style={{ margin: 0 }}>
+                  Page {userPageClamped} of {userTotalPages} · {sortedUsers.length} user{sortedUsers.length === 1 ? "" : "s"}
+                </span>
+                <button
+                  style={{ width: "auto", padding: "7px 14px" }}
+                  onClick={() => setUserPage(Math.min(userTotalPages, userPageClamped + 1))}
+                  disabled={userPageClamped >= userTotalPages}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

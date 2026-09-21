@@ -21,7 +21,7 @@ export default function MobileNavMenu({ onNavigate }) {
         Dashboard
       </Link>
       <Link href="/activities" className={`user-menu-item${pathname === "/activities" ? " active" : ""}`} onClick={onNavigate}>
-        Last 30 Activities
+        Activities
       </Link>
       <div
         className={`user-menu-item mobile-nav-trigger${trainingActive ? " active" : ""}`}

@@ -703,7 +703,7 @@ export default function Dashboard() {
                 resting heart rate, and readiness — right alongside it, so progress and recovery sit side by
                 side. Weather/humidity aren't shown — Strava only occasionally records a device temperature,
                 and there's no live weather source wired up.
-                {" "}<Link href="/activities">See each activity&rsquo;s own card — Last 30 Activities →</Link>
+                {" "}<Link href="/activities">See each activity&rsquo;s own card — Activities →</Link>
               </div>
               <div className="toggle-group" style={{ marginBottom: 12 }}>
                 {["ink", "paper", "signal"].map((k) => (
