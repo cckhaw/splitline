@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import AdminBrand from "@/components/AdminBrand";
 
 export default function AdminLoginPage() {
   const router = useRouter();
@@ -33,9 +34,7 @@ export default function AdminLoginPage() {
   return (
     <div className="shell narrow">
       <div className="top" style={{ marginBottom: 28 }}>
-        <span className="wordmark" style={{ cursor: "default" }}>
-          <span className="split">ADMIN</span>
-        </span>
+        <AdminBrand />
       </div>
       <div className="panel">
         <h2>Admin sign in</h2>
