@@ -121,17 +121,29 @@ only asks Strava for activities newer than the most recent one already
 imported (`after`, an epoch-timestamp filter on `/athlete/activities`)
 instead of re-listing — and then re-fetching detail+streams for — up to
 30 activities all over again. Rows accumulate in the `activities` table
-rather than staying capped at 30; every panel that reads "the last 30"
+as re-syncs bring in new ones; every panel that reads "the last 30"
 still does (`getActivitiesForUser`'s own `LIMIT`), so nothing about what
-you see changes, only how much redundant work a re-sync does to get
-there. A re-sync also re-fetches the Overtraining Shield panel, the
-Activity Summary infographic, an Oura Ring sync when one is connected
-(see "Oura Ring sleep and recovery data" below), and —
-if there's a saved training plan — checks it for deviation and
-regenerates/adjusts the plan's guidance around the freshest activity
-*and* recovery data (see "Comparing actual training against the plan"
-below). There's no separate manual "Refresh" button on any of those; a
-re-sync is what changes the underlying data each of them is computed
+those panels show changes — only how much redundant work a re-sync does
+to get there.
+
+**Housekeeping**, run once a completed re-sync's imports finish
+(`runHousekeeping` in `app/api/import/route.js`), keeps that
+accumulation bounded: at most 100 activities per account, oldest evicted
+first (`pruneOldActivitiesForUser`). Cached Oura sleep/recovery data is
+trimmed to match — once an activity ages out of the 100-activity window,
+the Oura nights before that window's new start are deleted too
+(`pruneOuraMetricsBefore`), so recovery data never outlives the training
+data it was paired with. The Activities page (below) is what actually
+lets an athlete browse that full 100-activity history.
+
+A re-sync also re-fetches the Overtraining Shield panel, the Activity
+Summary infographic, an Oura Ring sync when one is connected (see "Oura
+Ring sleep and recovery data" below), and — if there's a saved training
+plan — checks it for deviation and regenerates/adjusts the plan's
+guidance around the freshest activity *and* recovery data (see
+"Comparing actual training against the plan" below). There's no separate
+manual "Refresh" button on any of those; a re-sync is what changes the
+underlying data each of them is computed
 from, which is what actually triggers a fresh read.
 
 Dashboard layout, top to bottom in the main column: Training load (race
@@ -280,18 +292,25 @@ an actual deployment with real `OURA_CLIENT_ID`/`OURA_CLIENT_SECRET`
 credentials is the first place the live OAuth round trip and the real
 API responses get exercised.
 
-### Last 30 Activities
+### Activities
 
-A separate page (`/activities`) with the original per-activity telemetry
-overlay gallery — one Strava-style post-workout card per imported
-activity (`lib/svg.js`, `/api/overlay`), each with its own theme/units
-controls. Each card has a **"Post to my Strava feed"** button that
-renders the card as a PNG and hands it to the OS-level Web Share API
-(`navigator.share`) — on a device with the Strava app installed, Strava
-shows up as a share target there; Splitline itself never posts to
-Strava's API on a user's behalf. Where Web Share isn't available, the
-button falls back to a plain "Save as image" download with a hint to
-share it manually.
+A separate page (`/activities`, "ACTIVITIES" in the top nav) with the
+original per-activity telemetry overlay gallery — one Strava-style
+post-workout card per imported activity (`lib/svg.js`, `/api/overlay`),
+each with its own theme/units controls. Each card has a **"Post to my
+Strava feed"** button that renders the card as a PNG and hands it to the
+OS-level Web Share API (`navigator.share`) — on a device with the Strava
+app installed, Strava shows up as a share target there; Splitline itself
+never posts to Strava's API on a user's behalf. Where Web Share isn't
+available, the button falls back to a plain "Save as image" download
+with a hint to share it manually.
+
+Since housekeeping can keep up to 100 activities per account (see
+"Housekeeping" below), the gallery is paginated 6-at-a-time in a 3x2
+grid (`GET /api/activities/list`, separate from `GET /api/activities`
+which the dashboard still uses for "the last 30, unfiltered") rather
+than rendering every card at once, with an optional From/To date-range
+filter to jump straight to a specific period.
 
 ### Equipment Lifecycle & Telemetry
 
@@ -525,7 +544,12 @@ reach it), no link to it from the rest of the site, and excluded via
 - **Overview** (`/admin`): total users and their membership tier
   breakdown, site-wide feature-usage totals (re-syncs, AI refreshes,
   plan generations, exports), a device/browser split, and a table of
-  every user linking to their detail page.
+  every user linking to their detail page. The **All users** table is
+  client-side paginated (10/25/50 per page, 10 by default), with a
+  name/email search box and click-to-sort on every column — search and
+  sort both apply to the full user list before pagination slices it, so
+  sorting stays correct across pages rather than each page being
+  independently re-sorted.
 - **Per-user detail** (`/admin/users/[id]`): that user's tier, join
   date, activity count, a full usage-event breakdown and recent-activity
   log, and a **Membership panel** to set their tier and expiry date

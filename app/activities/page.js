@@ -6,8 +6,8 @@ import Link from "next/link";
 import AppHeader from "@/components/AppHeader";
 import SiteFooter from "@/components/SiteFooter";
 
-// Bounded parallelism for rendering up to 30 SVG previews at once — plenty
-// of throughput without hammering the server with 30 simultaneous requests.
+// Bounded parallelism for rendering a page's SVG previews at once — plenty
+// of throughput without hammering the server with several simultaneous requests.
 async function mapWithConcurrency(items, limit, fn) {
   const results = new Array(items.length);
   let next = 0;
@@ -21,13 +21,24 @@ async function mapWithConcurrency(items, limit, fn) {
   return results;
 }
 
+const PAGE_SIZE = 6;
+
 // The per-activity twin of the dashboard's Strava Summary panel: one
 // cockpit-readout card per imported activity (lib/svg.js's real renderer,
 // same one /api/mcp serves), rather than the single aggregate infographic.
+// Paginated 6-at-a-time (a 3x2 grid) with an optional date range, since
+// housekeeping now keeps up to 100 activities per account (see
+// app/api/import/route.js) — too many to render as one long gallery.
 export default function ActivitiesPage() {
   const router = useRouter();
   const [me, setMe] = useState(null);
   const [activities, setActivities] = useState([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
+  const [loadingPage, setLoadingPage] = useState(true);
+  const [fromDate, setFromDate] = useState("");
+  const [toDate, setToDate] = useState("");
+  const [dateError, setDateError] = useState("");
   const [previews, setPreviews] = useState({});
   const [savingId, setSavingId] = useState(null);
   const [postingId, setPostingId] = useState(null);
@@ -39,14 +50,34 @@ export default function ActivitiesPage() {
     fetch("/api/me").then((r) => r.json()).then(async (data) => {
       if (!data.authenticated) { router.push("/login"); return; }
       setMe(data);
-      const res = await fetch("/api/activities");
-      const actData = await res.json();
-      const list = actData.activities || [];
-      setActivities(list);
-      if (list.length) await loadPreviews(list, "ink", "metric");
+      await loadPage(1, "", "", "ink", "metric");
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [router]);
+
+  async function loadPage(pageArg, fromArg, toArg, themeArg, unitsArg) {
+    if (toArg && fromArg && toArg < fromArg) {
+      setDateError("The end date can't be before the start date.");
+      return;
+    }
+    setDateError("");
+    setLoadingPage(true);
+    try {
+      const params = new URLSearchParams({ page: String(pageArg) });
+      if (fromArg) params.set("from", fromArg);
+      if (toArg) params.set("to", toArg);
+      const res = await fetch(`/api/activities/list?${params.toString()}`);
+      const data = await res.json();
+      const list = data.activities || [];
+      setActivities(list);
+      setTotal(data.total || 0);
+      setPage(pageArg);
+      setPreviews({});
+      if (list.length) await loadPreviews(list, themeArg ?? theme, unitsArg ?? units);
+    } finally {
+      setLoadingPage(false);
+    }
+  }
 
   async function loadPreviews(list, themeArg, unitsArg) {
     const entries = await mapWithConcurrency(list, 4, async (a) => {
@@ -69,6 +100,16 @@ export default function ActivitiesPage() {
   function changeUnits(next) {
     setUnits(next);
     loadPreviews(activities, theme, next);
+  }
+
+  function applyDateFilter() {
+    loadPage(1, fromDate, toDate, theme, units);
+  }
+  function clearDateFilter() {
+    setFromDate("");
+    setToDate("");
+    setDateError("");
+    loadPage(1, "", "", theme, units);
   }
 
   function fileNameFor(name) {
@@ -144,6 +185,9 @@ export default function ActivitiesPage() {
 
   if (!me) return <div className="shell"><div className="status-line">Loading…</div></div>;
 
+  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+  const filtered = Boolean(fromDate || toDate);
+
   return (
     <div className="shell">
       <AppHeader
@@ -156,13 +200,13 @@ export default function ActivitiesPage() {
         onOuraChange={(connected) => setMe((m) => (m ? { ...m, ouraConnected: connected } : m))}
       />
 
-      <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 6 }}>Last 30 Activities</h2>
+      <h2 style={{ fontSize: "calc(20px * var(--fs-scale, 1))", color: "var(--ink)", marginBottom: 6 }}>Activities</h2>
       <div className="hint" style={{ marginTop: 0, marginBottom: 18 }}>
         Every imported activity gets its own cockpit-readout card — pace, power, heart rate, and the trace itself,
         styled from that activity&rsquo;s own numbers. Save any one and post it straight to your Strava feed.
       </div>
 
-      {activities.length === 0 ? (
+      {total === 0 && !filtered && !loadingPage ? (
         <div className="panel">
           <div className="hint" style={{ marginTop: 0 }}>
             No activities imported yet — head back to the <Link href="/app">Dashboard</Link> to connect Strava and import.
@@ -170,6 +214,24 @@ export default function ActivitiesPage() {
         </div>
       ) : (
         <>
+          <div className="panel" style={{ marginBottom: 18 }}>
+            <div className="activities-filter-row">
+              <label className="activities-filter-field">
+                <span>From</span>
+                <input type="date" value={fromDate} onChange={(e) => setFromDate(e.target.value)} max={toDate || undefined} />
+              </label>
+              <label className="activities-filter-field">
+                <span>To</span>
+                <input type="date" value={toDate} onChange={(e) => setToDate(e.target.value)} min={fromDate || undefined} />
+              </label>
+              <button style={{ width: "auto", padding: "7px 14px" }} onClick={applyDateFilter}>Filter</button>
+              {filtered && (
+                <button style={{ width: "auto", padding: "7px 14px" }} onClick={clearDateFilter}>Clear</button>
+              )}
+            </div>
+            {dateError && <div className="status-line warn" style={{ marginTop: 10 }}>{dateError}</div>}
+          </div>
+
           <div className="toggle-group" style={{ marginBottom: 18 }}>
             {["ink", "paper", "signal"].map((k) => (
               <div key={k} className={`toggle${theme === k ? " active" : ""}`} onClick={() => changeTheme(k)}>
@@ -184,29 +246,57 @@ export default function ActivitiesPage() {
             ))}
           </div>
 
-          <div className="gallery">
-            {activities.map((a) => (
-              <div key={a.id} className="gallery-card">
-                {previews[a.id] ? (
-                  <img src={previews[a.id]} alt={a.name} />
-                ) : (
-                  <div className="status-line" style={{ padding: 16, marginTop: 0 }}>Rendering…</div>
-                )}
-                <div className="gallery-card-footer">
-                  <span>{a.name}</span>
-                  <div className="gallery-card-actions">
-                    <button onClick={() => saveCard(a.id, a.name)} disabled={savingId === a.id}>
-                      {savingId === a.id ? "Saving…" : "Save as image"}
-                    </button>
-                    <button onClick={() => postToStrava(a.id, a.name)} disabled={postingId === a.id}>
-                      {postingId === a.id ? "Preparing…" : "Post to my Strava feed"}
-                    </button>
+          {total === 0 ? (
+            <div className="panel">
+              <div className="hint" style={{ marginTop: 0 }}>No activities in that date range.</div>
+            </div>
+          ) : (
+            <div className="gallery gallery-3x2">
+              {activities.map((a) => (
+                <div key={a.id} className="gallery-card">
+                  {previews[a.id] ? (
+                    <img src={previews[a.id]} alt={a.name} />
+                  ) : (
+                    <div className="status-line" style={{ padding: 16, marginTop: 0 }}>Rendering…</div>
+                  )}
+                  <div className="gallery-card-footer">
+                    <span>{a.name}</span>
+                    <div className="gallery-card-actions">
+                      <button onClick={() => saveCard(a.id, a.name)} disabled={savingId === a.id}>
+                        {savingId === a.id ? "Saving…" : "Save as image"}
+                      </button>
+                      <button onClick={() => postToStrava(a.id, a.name)} disabled={postingId === a.id}>
+                        {postingId === a.id ? "Preparing…" : "Post to my Strava feed"}
+                      </button>
+                    </div>
+                    {postHint?.id === a.id && <div className="gallery-card-hint">{postHint.text}</div>}
                   </div>
-                  {postHint?.id === a.id && <div className="gallery-card-hint">{postHint.text}</div>}
                 </div>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
+
+          {total > 0 && (
+            <div className="activities-pagination">
+              <button
+                style={{ width: "auto", padding: "7px 14px" }}
+                onClick={() => loadPage(page - 1, fromDate, toDate)}
+                disabled={page <= 1 || loadingPage}
+              >
+                ← Previous
+              </button>
+              <span className="hint" style={{ margin: 0 }}>
+                Page {page} of {totalPages} · {total} activit{total === 1 ? "y" : "ies"}
+              </span>
+              <button
+                style={{ width: "auto", padding: "7px 14px" }}
+                onClick={() => loadPage(page + 1, fromDate, toDate)}
+                disabled={page >= totalPages || loadingPage}
+              >
+                Next →
+              </button>
+            </div>
+          )}
         </>
       )}
 

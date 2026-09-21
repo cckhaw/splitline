@@ -20,7 +20,7 @@ export default function TermsPage() {
       <div className="panel">
         <div className="legal-content">
           <h1>Terms of Service</h1>
-          <p className="legal-updated">Last updated: September 18, 2026</p>
+          <p className="legal-updated">Last updated: September 21, 2026</p>
 
           <h2>1. Acceptance of Terms</h2>
           <p>
@@ -53,12 +53,15 @@ export default function TermsPage() {
             integrations, or attempt to access another user&rsquo;s data without authorization.
           </p>
 
-          <h2>4. Strava Data &amp; Third-Party Integrations</h2>
+          <h2>4. Connected Accounts &amp; Third-Party Integrations</h2>
           <p>
-            Connecting your Strava account is optional, but required for Splitline&rsquo;s core features. Your
-            use of Strava&rsquo;s platform through Splitline remains subject to Strava&rsquo;s own Terms of
-            Service. If you choose to sign in with Google, that sign-in is likewise subject to Google&rsquo;s
-            terms.
+            Splitline works by connecting to third-party fitness and wellness services on your behalf —
+            currently Strava (required for Splitline&rsquo;s core features) and, optionally, Oura Ring for sleep
+            and recovery data, with further integrations possible in the future. Your use of each connected
+            service through Splitline remains subject to that service&rsquo;s own Terms of Service, and we keep
+            up to 100 of your most recent Strava activities (with connected recovery data trimmed to match, as
+            described in our <Link href="/privacy">Privacy Policy</Link>). If you choose to sign in with Google,
+            that sign-in is likewise subject to Google&rsquo;s terms.
           </p>
 
           <h2>5. Subscriptions &amp; Billing</h2>

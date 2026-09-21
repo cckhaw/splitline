@@ -20,16 +20,17 @@ export default function PrivacyPage() {
       <div className="panel">
         <div className="legal-content">
           <h1>Privacy Policy</h1>
-          <p className="legal-updated">Last updated: September 18, 2026</p>
+          <p className="legal-updated">Last updated: September 21, 2026</p>
 
           <h2>1. Introduction</h2>
           <p>
             Welcome to Splitline (&ldquo;we,&rdquo; &ldquo;our,&rdquo; or &ldquo;us&rdquo;). We are committed to
             protecting your privacy while delivering AI-driven telemetry summaries, biomechanical and
             overtraining analysis, equipment lifecycle monitoring, race-day pacing and fueling plans, and
-            progressive training plans built from your own Strava activity history. This Privacy Policy
-            explains how we collect, use, process, and protect your personal and activity data when you use
-            Splitline.
+            progressive training plans built from your own activity history and any wellness data you choose to
+            connect (currently Strava for activities, and optionally Oura Ring for sleep and recovery). This
+            Privacy Policy explains how we collect, use, process, and protect your personal and activity data
+            when you use Splitline.
           </p>
 
           <h2>2. Data We Collect</h2>
@@ -41,11 +42,26 @@ export default function PrivacyPage() {
             injury-risk and shoe-wear estimates described below. Your membership tier and billing status.
           </p>
           <p>
-            <strong>Strava fitness &amp; telemetry data.</strong> Once you connect your Strava account, we
-            import your recent activities and their streams — heart rate, power, cadence, elevation, and
-            pace/speed — along with activity metadata (name, sport type, date, distance, moving time, calories,
-            and device-recorded temperature where Strava provides it) and your registered gear (shoes and
-            bikes), including accumulated mileage and retirement status.
+            <strong>Connected fitness &amp; wellness data.</strong> Splitline is built around data from
+            third-party fitness and wellness services you choose to connect — currently Strava and, optionally,
+            Oura Ring, with more integrations possible in the future. Whatever the source, the same principles
+            apply: we only request the data needed for the features described in this policy, we never sell it,
+            and you can disconnect a service at any time to stop us pulling anything new from it (Section 6).
+          </p>
+          <p>
+            <strong>Strava.</strong> Once you connect your Strava account, we import your recent activities and
+            their streams — heart rate, power, cadence, elevation, and pace/speed — along with activity metadata
+            (name, sport type, date, distance, moving time, calories, and device-recorded temperature where
+            Strava provides it) and your registered gear (shoes and bikes), including accumulated mileage and
+            retirement status. We keep up to 100 of your most recent activities; once you have more than that,
+            the oldest are automatically deleted as new ones sync in from Strava.
+          </p>
+          <p>
+            <strong>Oura Ring (optional).</strong> If you connect an Oura Ring, we import nightly sleep and
+            readiness data — total/deep/REM/light sleep duration, sleep efficiency, average HRV, resting heart
+            rate, sleep score, and readiness score — to sharpen the recovery signal shown alongside your
+            training data. We keep this data for the same date range your 100 most recent Strava activities
+            cover; as older activities age out of that window, the Oura nights before it are removed too.
           </p>
           <p>
             <strong>Derived biomechanical &amp; training metrics.</strong> Computed from the data above: acute-
@@ -82,9 +98,21 @@ export default function PrivacyPage() {
 
           <h2>4. Data Sharing &amp; Third-Party Services</h2>
           <p>
+            <strong>Connected fitness &amp; wellness accounts.</strong> Each service you connect (Strava, Oura
+            Ring, and any added in the future) has its own terms and privacy practices governing our access; we
+            request only the read scopes needed for the features described above and never sell that data to
+            third parties. Disconnecting a service from your <Link href="/account">Account</Link> page or from
+            that provider&rsquo;s own settings immediately stops us pulling anything new from it.
+          </p>
+          <p>
             <strong>Strava API.</strong> We access and process data in accordance with the Strava API Agreement
             and Developer Guidelines, requesting only the read scopes needed to import your activities, gear,
-            and profile. We do not sell your Strava data to third parties.
+            and profile.
+          </p>
+          <p>
+            <strong>Oura API.</strong> If connected, we access sleep and readiness data in accordance with
+            Oura&rsquo;s own API terms, requesting only the read scopes needed for the recovery features
+            described above.
           </p>
           <p>
             <strong>Anthropic (Claude API).</strong> Processes the specific data described in Section 3 to
@@ -105,18 +133,22 @@ export default function PrivacyPage() {
 
           <h2>5. Data Security &amp; Retention</h2>
           <p>
-            Your Strava access and refresh tokens are encrypted at rest (AES-256-GCM); passwords are hashed,
-            never stored in plain text; and all traffic to and from Splitline is encrypted in transit (TLS).
-            Data is retained for as long as your account remains active, or as needed to provide the analytics
-            described above. You may request deletion at any time — see Section 6.
+            Access and refresh tokens for any connected fitness or wellness account are encrypted at rest
+            (AES-256-GCM); passwords are hashed, never stored in plain text; and all traffic to and from
+            Splitline is encrypted in transit (TLS). As described in Section 2, imported activity data is
+            capped at your 100 most recent activities (with connected recovery data such as Oura sleep/readiness
+            trimmed to match), oldest first, so storage doesn&rsquo;t grow without bound the longer an account
+            stays active. Everything else is retained for as long as your account remains active, or as needed
+            to provide the analytics described above. You may request deletion at any time — see Section 6.
           </p>
 
           <h2>6. Your Rights &amp; Data Control</h2>
           <p>
-            <strong>Revoking Strava access.</strong> You can disconnect Splitline from your Strava account at
-            any time from Strava&rsquo;s own connected-apps settings at{" "}
+            <strong>Revoking access to a connected account.</strong> You can disconnect Oura Ring any time from
+            Splitline&rsquo;s own menu, or disconnect Strava from Strava&rsquo;s connected-apps settings at{" "}
             <a href="https://www.strava.com/settings/apps" target="_blank" rel="noreferrer">strava.com/settings/apps</a>
-            ; we immediately stop being able to pull any new data.
+            {" "}(the same applies to any future connected service, from either Splitline&rsquo;s menu or that
+            provider&rsquo;s own settings) — we immediately stop being able to pull any new data from it.
           </p>
           <p>
             <strong>Access &amp; export.</strong> Email{" "}

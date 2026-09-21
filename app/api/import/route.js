@@ -3,6 +3,7 @@ import { getSessionUser } from "@/lib/authGuard";
 import {
   getStravaConnection, updateStravaTokens, upsertActivity, getActivitiesForUser, countActivitiesForUser, upsertGear, setStravaAvatar,
   getOuraConnection, updateOuraTokens, upsertOuraDailyMetric, getLatestOuraDay,
+  pruneOldActivitiesForUser, pruneOuraMetricsBefore,
 } from "@/lib/db";
 import { getValidAccessToken, listActivities, getActivity, getStreams, getGear, getAthlete } from "@/lib/strava";
 import { getValidAccessToken as getValidOuraAccessToken, fetchDailyMetrics } from "@/lib/oura";
@@ -12,7 +13,8 @@ export const runtime = "nodejs";
 export const maxDuration = 60; // Pro plan+; Hobby caps this lower regardless — see README.
 
 const PAGE_SIZE = 5;   // small on purpose: 2 Strava calls per activity, done sequentially
-const MAX_ACTIVITIES = 30;
+const MAX_ACTIVITIES = 30;      // the very first import's own fetch cap
+const MAX_STORED_ACTIVITIES = 100; // housekeeping cap across all subsequent re-syncs — see runHousekeeping()
 
 function trim(arr) {
   if (!arr || !arr.length) return null;
@@ -26,21 +28,44 @@ function isoDate(d) {
 
 const OURA_REFETCH_OVERLAP_DAYS = 3; // re-pull the last few already-synced days too — Oura's own sleep/readiness scores can still settle/backfill a day or two after the fact
 
+// Keeps storage bounded across however many re-syncs an account
+// accumulates: at most MAX_STORED_ACTIVITIES Strava activities, oldest
+// evicted first, and Oura data trimmed to that same surviving window
+// (there's no reason to keep sleep/readiness nights for a period no
+// panel shows anymore). Runs once per completed sync — right before
+// syncOuraData, so its own fetch window is already based on the
+// trimmed activity set rather than one that's about to be pruned out
+// from under it.
+async function runHousekeeping(userId) {
+  try {
+    const deleted = await pruneOldActivitiesForUser(userId, MAX_STORED_ACTIVITIES);
+    if (deleted > 0) {
+      const remaining = await getActivitiesForUser(userId, MAX_STORED_ACTIVITIES);
+      if (remaining.length) {
+        const oldest = remaining.reduce((min, a) => (new Date(a.startDate) < new Date(min.startDate) ? a : min));
+        await pruneOuraMetricsBefore(userId, isoDate(oldest.startDate));
+      }
+    }
+  } catch (e) {
+    console.error("Activity/Oura housekeeping failed (continuing):", e);
+  }
+}
+
 // Fetches and caches Oura sleep/recovery data covering the same period
 // the Activity Summary and Overtraining Shield panels show — but only
 // the part not already synced. The first sync (or the first one after
 // reconnecting) still covers the full period, from the earliest of the
-// athlete's last 30 Strava activities through today; every sync after
-// that starts a few days before the latest already-stored day instead
-// of re-requesting the whole window again. Best-effort: no Oura
-// connection, or any failure here, never blocks or fails the Strava
-// import itself.
+// athlete's last (up to MAX_STORED_ACTIVITIES) Strava activities through
+// today; every sync after that starts a few days before the latest
+// already-stored day instead of re-requesting the whole window again.
+// Best-effort: no Oura connection, or any failure here, never blocks or
+// fails the Strava import itself.
 async function syncOuraData(request, userId) {
   const connection = await getOuraConnection(userId);
   if (!connection) return;
 
   try {
-    const activities = await getActivitiesForUser(userId, MAX_ACTIVITIES);
+    const activities = await getActivitiesForUser(userId, MAX_STORED_ACTIVITIES);
     if (!activities.length) return;
     const earliest = activities.reduce((min, a) => (new Date(a.startDate) < new Date(min.startDate) ? a : min));
     const periodStart = isoDate(earliest.startDate);
@@ -143,6 +168,7 @@ export async function POST(request) {
     const isDeltaSync = afterEpoch != null;
     const remaining = isDeltaSync ? Infinity : MAX_ACTIVITIES - (page - 1) * PAGE_SIZE;
     if (remaining <= 0) {
+      await runHousekeeping(session.userId);
       await syncOuraData(request, session.userId);
       return NextResponse.json({ imported: 0, total: await countActivitiesForUser(session.userId), done: true });
     }
@@ -209,9 +235,13 @@ export async function POST(request) {
       }
     }
 
-    const total = await countActivitiesForUser(session.userId);
+    let total = await countActivitiesForUser(session.userId);
     const done = summaries.length < PAGE_SIZE || (!isDeltaSync && total >= MAX_ACTIVITIES);
-    if (done) await syncOuraData(request, session.userId);
+    if (done) {
+      await runHousekeeping(session.userId);
+      await syncOuraData(request, session.userId);
+      total = await countActivitiesForUser(session.userId); // reflect any eviction from runHousekeeping
+    }
     return NextResponse.json({ imported, total, done, nextPage: page + 1, afterEpoch });
   } catch (e) {
     return NextResponse.json({ error: "strava_error", message: String(e.message || e) }, { status: 502 });
