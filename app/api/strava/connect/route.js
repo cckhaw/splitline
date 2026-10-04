@@ -32,8 +32,14 @@ export async function POST(request) {
     return NextResponse.json({ error: "not_configured", message: "No Strava app is configured for this deployment yet." }, { status: 500 });
   }
 
-  const state = crypto.randomBytes(16).toString("hex");
-  const redirectUri = `${url.origin}/api/strava/callback`;
+  // Strava only accepts one Authorization Callback Domain per app, so when
+  // APP_URL is set the redirect always targets that domain, whichever host
+  // the athlete started from. The starting origin rides along in `state`
+  // so the callback can bounce them back to it (cookies are per-host).
+  const base = (process.env.APP_URL || url.origin).replace(/\/+$/, "");
+  const nonce = crypto.randomBytes(16).toString("hex");
+  const state = base === url.origin ? nonce : `${nonce}.${Buffer.from(url.origin).toString("base64url")}`;
+  const redirectUri = `${base}/api/strava/callback`;
 
   const pending = await new EncryptJWT({ state, ownClientId, ownClientSecret })
     .setProtectedHeader({ alg: "dir", enc: "A256GCM" })

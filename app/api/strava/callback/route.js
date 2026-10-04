@@ -11,8 +11,30 @@ function pendingKey() {
   return new TextEncoder().encode(s.slice(0, 32).padEnd(32, "0"));
 }
 
+// If the connect flow started on a different host than the one Strava
+// redirected to (see connect/route.js), forward the response there — that
+// host holds the session and pending cookies. Only origins listed in
+// APP_ALLOWED_ORIGINS (comma-separated) are honored, so a crafted `state`
+// can't turn this into an open redirect.
+function forwardTarget(url, state) {
+  const encoded = state?.split(".")[1];
+  if (!encoded) return null;
+  let origin;
+  try {
+    origin = new URL(Buffer.from(encoded, "base64url").toString()).origin;
+  } catch {
+    return null;
+  }
+  if (origin === url.origin) return null;
+  const allowed = (process.env.APP_ALLOWED_ORIGINS || "").split(",").map((s) => s.trim().replace(/\/+$/, "")).filter(Boolean);
+  return allowed.includes(origin) ? `${origin}${url.pathname}${url.search}` : null;
+}
+
 export async function GET(request) {
   const url = new URL(request.url);
+  const forward = forwardTarget(url, url.searchParams.get("state"));
+  if (forward) return NextResponse.redirect(forward);
+
   const session = await getSessionUser(request);
   if (!session) return NextResponse.redirect(`${url.origin}/login`);
 
