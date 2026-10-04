@@ -6,7 +6,7 @@ import UserMenu from "@/components/UserMenu";
 // account) — wordmark + primary nav on the left, identity/hamburger menu
 // on the right. One component so the nav can't drift out of sync between
 // pages the way three hand-rolled headers eventually would.
-export default function AppHeader({ name, tier, isTrial, avatarUrl, onResync, resyncing, stravaConnected, ouraConnected, onOuraChange }) {
+export default function AppHeader({ name, tier, isTrial, avatarUrl, onResync, resyncing, stravaConnected, ouraConnected, onOuraChange, onStravaChange }) {
   return (
     <header className="top">
       <div className="top-left">
@@ -27,6 +27,7 @@ export default function AppHeader({ name, tier, isTrial, avatarUrl, onResync, re
           stravaConnected={stravaConnected}
           ouraConnected={ouraConnected}
           onOuraChange={onOuraChange}
+          onStravaChange={onStravaChange}
         />
       </nav>
     </header>
