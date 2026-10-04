@@ -715,6 +715,7 @@ deletes everything it made. All five lines should print `✓`.
 |---|---|
 | `STRAVA_CLIENT_ID` | from step 1 |
 | `STRAVA_CLIENT_SECRET` | from step 1 |
+| `APP_URL` / `APP_ALLOWED_ORIGINS` | optional — Strava allows only one Authorization Callback Domain per app. Set `APP_URL` (e.g. `https://splitline.khaw.cc`, matching that domain) so Strava connect always redirects there, and list any other hosts you sign in from (e.g. `https://your-project.vercel.app`) comma-separated in `APP_ALLOWED_ORIGINS` so the callback sends you back to the host you started on. |
 | `OURA_CLIENT_ID` / `OURA_CLIENT_SECRET` | optional — register an application at [cloud.ouraring.com/oauth/applications](https://cloud.ouraring.com/oauth/applications) (redirect URI `https://your-domain/api/oura/callback`) to power the sleep/HRV/readiness data in the Activity Summary and Overtraining Shield panels. Without these, the "Connect Oura Ring" button shows "not configured"; the rest of the app is unaffected. |
 | `SESSION_SECRET` | random 32+ chars — `openssl rand -base64 32` |
 | `ENCRYPTION_KEY` | random 32+ chars — a **different** value than `SESSION_SECRET` |
