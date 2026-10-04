@@ -314,6 +314,7 @@ export default function Dashboard() {
         stravaConnected={me.stravaConnected}
         ouraConnected={me.ouraConnected}
         onOuraChange={(connected) => setMe((prev) => (prev ? { ...prev, ouraConnected: connected } : prev))}
+        onStravaChange={(connected) => setMe((prev) => (prev ? { ...prev, stravaConnected: connected } : prev))}
       />
 
       {deviation && (

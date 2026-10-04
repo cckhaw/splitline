@@ -16,13 +16,15 @@ const TIER_LABELS = { free: "Free", plus: "Plus", pro: "Pro" };
 // name (with their membership tier) opens a dropdown with the rest of
 // the account-level navigation, instead of spreading those links flat
 // across the header.
-export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, resyncing, stravaConnected, ouraConnected, onOuraChange }) {
+export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, resyncing, stravaConnected, ouraConnected, onOuraChange, onStravaChange }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [theme, setTheme] = useState(null);
   const [fontScale, setFontScale] = useState(null);
   const [ouraBusy, setOuraBusy] = useState(false);
   const [ouraError, setOuraError] = useState("");
+  const [stravaBusy, setStravaBusy] = useState(false);
+  const [stravaError, setStravaError] = useState("");
   const ref = useRef(null);
 
   useEffect(() => {
@@ -113,6 +115,27 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, res
     }
   }
 
+  // Drops the stored Strava tokens (imported activities are kept). Lands on
+  // the dashboard afterwards, where the "Connect Strava" panel takes over —
+  // from any other page that's a navigation; on the dashboard itself it's a
+  // no-op and onStravaChange updates the page's own state.
+  async function handleDisconnectStrava() {
+    if (stravaBusy) return;
+    setStravaBusy(true);
+    setStravaError("");
+    try {
+      const res = await fetch("/api/strava/disconnect", { method: "POST" });
+      if (!res.ok) throw new Error("Couldn't disconnect Strava — try again.");
+      onStravaChange?.(false);
+      setOpen(false);
+      router.push("/app");
+    } catch (e) {
+      setStravaError(e.message);
+    } finally {
+      setStravaBusy(false);
+    }
+  }
+
   const tierLabel = TIER_LABELS[tier] || TIER_LABELS.free;
   const tierSuffix = isTrial ? " - Trial" : "";
   const resyncLabel = resyncing ? "Re-syncing…" : ouraConnected ? "Re-sync from Strava & Oura" : "Re-sync from Strava";
@@ -138,6 +161,16 @@ export default function UserMenu({ name, tier, isTrial, avatarUrl, onResync, res
               {resyncLabel}
             </div>
           )}
+          {stravaConnected && (
+            <div
+              className="user-menu-item"
+              onClick={handleDisconnectStrava}
+              style={stravaBusy ? { opacity: 0.6, cursor: "default" } : undefined}
+            >
+              {stravaBusy ? "Disconnecting…" : "Disconnect Strava"}
+            </div>
+          )}
+          {stravaError && <div className="user-menu-error">{stravaError}</div>}
           {ouraConnected != null && (
             <div
               className="user-menu-item"
