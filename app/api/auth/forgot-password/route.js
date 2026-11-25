@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUserByEmail, friendlyDbErrorMessage } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
+import { rateLimit, clientIp, idKey } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -10,6 +11,12 @@ export const runtime = "nodejs";
 export async function POST(request) {
   const { email } = await request.json().catch(() => ({}));
   if (!email) return NextResponse.json({ error: "missing_email", message: "Enter your email address." }, { status: 400 });
+
+  const limited = await rateLimit([
+    { key: `forgot:ip:${clientIp(request)}`, limit: 10, windowSeconds: 60 * 60 },
+    { key: `forgot:acct:${idKey(email)}`, limit: 5, windowSeconds: 60 * 60 },
+  ]);
+  if (limited) return limited;
 
   try {
     const user = await getUserByEmail(email);

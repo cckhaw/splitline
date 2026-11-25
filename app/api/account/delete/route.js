@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
 import { getSessionUser } from "@/lib/authGuard";
 import {
   getUserById, getUserByEmail, deleteUser, recordDeletedUser, adminUserEventCounts, countActivitiesForUser, friendlyDbErrorMessage,
 } from "@/lib/db";
-import { SESSION_COOKIE } from "@/lib/session";
+import { SESSION_COOKIE, isFreshSession } from "@/lib/session";
+import { verifyPassword } from "@/lib/password";
 import { resolveEffectiveTier, isTrialTier } from "@/lib/membership";
 
 export const runtime = "nodejs";
@@ -25,14 +25,20 @@ export async function POST(request) {
       return NextResponse.json({ error: "email_mismatch", message: "Type your account email exactly to confirm." }, { status: 400 });
     }
 
-    // Same rule as changing your password: an account with no password
-    // yet (Google-only sign-in) skips this check; one with a password
-    // set must re-enter it, session hijack or shared-device protection.
+    // Same rule as changing your password: one with a password set must
+    // re-enter it; a Google-only account (no password) must have signed
+    // in recently. Both guard against a hijacked or shared-device session.
     const withHash = await getUserByEmail(user.email);
     if (withHash.password_hash) {
-      if (!password || !(await bcrypt.compare(password, withHash.password_hash))) {
+      const { ok } = await verifyPassword(password, withHash.password_hash);
+      if (!ok) {
         return NextResponse.json({ error: "wrong_password", message: "Current password is incorrect." }, { status: 401 });
       }
+    } else if (!isFreshSession(session)) {
+      return NextResponse.json(
+        { error: "reauth_required", message: "For your security, sign out and sign in again, then delete your account." },
+        { status: 401 }
+      );
     }
 
     // Best-effort — a Stripe hiccup shouldn't block someone from deleting

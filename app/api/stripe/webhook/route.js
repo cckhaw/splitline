@@ -36,6 +36,15 @@ export async function POST(request) {
     return NextResponse.json({ error: "invalid_signature" }, { status: 400 });
   }
 
+  // Already handled this exact event (Stripe retries / duplicate delivery)?
+  // A missing table (schema.sql not re-run) just disables dedupe.
+  try {
+    const seen = await query(`SELECT 1 FROM processed_stripe_events WHERE event_id = $1`, [event.id]);
+    if (seen.length) return NextResponse.json({ received: true, duplicate: true });
+  } catch (e) {
+    if (e?.code !== "42P01") console.error("Stripe event dedupe lookup failed:", e);
+  }
+
   try {
     switch (event.type) {
       case "checkout.session.completed": {
@@ -95,14 +104,39 @@ export async function POST(request) {
         break;
       }
 
+      // Failed renewal: Stripe retries the charge itself and (per your
+      // dunning settings) eventually cancels, which arrives as
+      // customer.subscription.deleted. Nothing to change here — the paid
+      // tier keeps running until tier_expires_at — but log it so it's visible.
+      case "invoice.payment_failed": {
+        const invoice = event.data.object;
+        console.warn(`Stripe invoice.payment_failed for customer ${invoice.customer} (attempt ${invoice.attempt_count ?? "?"}).`);
+        break;
+      }
+
+      // Refund: log for manual review. Whether a refund should also end
+      // access is a business decision, so access is not revoked automatically.
+      case "charge.refunded": {
+        const charge = event.data.object;
+        console.warn(`Stripe charge.refunded for customer ${charge.customer} (charge ${charge.id}) — review whether to revoke access.`);
+        break;
+      }
+
       default:
         break; // Other event types aren't relevant to membership state.
     }
   } catch (e) {
     console.error(`Failed to handle Stripe webhook event ${event.type}:`, e);
-    // Still 200 — Stripe retries on non-2xx, and retrying a handler that
-    // failed on our own bug won't fix itself. Errors are logged for
-    // manual follow-up instead.
+    // Non-2xx so Stripe retries — a paid upgrade that hit a transient
+    // database/Stripe error must not be silently dropped. (Handlers are
+    // idempotent: they set absolute tier/expiry values.)
+    return NextResponse.json({ error: "handler_failed" }, { status: 500 });
+  }
+
+  try {
+    await query(`INSERT INTO processed_stripe_events (event_id) VALUES ($1) ON CONFLICT DO NOTHING`, [event.id]);
+  } catch (e) {
+    if (e?.code !== "42P01") console.error("Failed to record processed Stripe event:", e);
   }
 
   return NextResponse.json({ received: true });

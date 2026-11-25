@@ -8,6 +8,7 @@ export default function AdminLoginPage() {
   const router = useRouter();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
+  const [totp, setTotp] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -19,7 +20,7 @@ export default function AdminLoginPage() {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ username, password, totp }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.message || "Couldn't log in.");
@@ -46,6 +47,8 @@ export default function AdminLoginPage() {
           <input required autoFocus value={username} onChange={(e) => setUsername(e.target.value)} />
           <label>Password</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <label>Authenticator code <span className="hint">(if enabled)</span></label>
+          <input inputMode="numeric" autoComplete="one-time-code" maxLength={6} value={totp} onChange={(e) => setTotp(e.target.value)} />
           {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
           <button className="primary" type="submit" disabled={loading} style={{ marginTop: 18 }}>
             {loading ? "Signing in…" : "Sign in"}

@@ -804,3 +804,13 @@ Domain to `localhost` (Strava allows this). For local Oura OAuth
 testing, add `http://localhost:3000/api/oura/callback` as a redirect URI
 on the Oura application. For local admin testing, set
 `ADMIN_USERNAME`/`ADMIN_PASSWORD` in `.env.local` too.
+
+## Production deploys (GitHub Actions → Vercel)
+
+`.github/workflows/deploy-production.yml` runs on every push to `main` (i.e. every merged PR): it builds with
+the Vercel CLI, deploys to **production only**, waits until the new deployment is live, then runs
+`scripts/vercel-cleanup.mjs` to delete every other deployment of the project. `vercel.json` disables Vercel's
+own Git-triggered builds, so no preview deployments are ever created. Required repository secrets (or
+variables): `VERCEL_TOKEN`, `VERCEL_ORG_ID`, `VERCEL_PROJECT_ID`, and `VERCEL_TEAM_ID`.
+
+`.github/workflows/ci.yml` runs `npm audit --audit-level=high` and a build on every pull request.

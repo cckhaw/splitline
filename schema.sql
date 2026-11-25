@@ -27,6 +27,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS tier TEXT NOT NULL DEFAULT 'free';
 ALTER TABLE users ADD COLUMN IF NOT EXISTS tier_expires_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_customer_id TEXT UNIQUE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS stripe_subscription_id TEXT;
+-- Bumped on password change/reset, email change and "sign out everywhere";
+-- every session cookie carries the version it was issued under and is
+-- rejected once it no longer matches (see lib/authGuard.js).
+ALTER TABLE users ADD COLUMN IF NOT EXISTS session_version INTEGER NOT NULL DEFAULT 0;
 -- Self-reported, optional; used only to scale the shoe-wear estimate in
 -- lib/equipment.js (heavier impact compresses midsole foam faster) — same
 -- reasoning as birth_date above: Strava's API doesn't expose body weight.
@@ -297,3 +301,21 @@ CREATE TABLE IF NOT EXISTS deleted_users (
   deleted_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS idx_deleted_users_deleted_at ON deleted_users (deleted_at DESC);
+
+-- Fixed-window request counters behind lib/rateLimit.js (login, signup,
+-- verification codes, admin login, MCP, ...). Old windows are purged
+-- opportunistically by hitRateLimit().
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key TEXT NOT NULL,
+  window_start TIMESTAMPTZ NOT NULL,
+  count INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (key, window_start)
+);
+
+-- Stripe webhook idempotency: an event id is recorded only after it was
+-- handled successfully, so retries of failed events are processed and
+-- retries of handled ones are skipped.
+CREATE TABLE IF NOT EXISTS processed_stripe_events (
+  event_id TEXT PRIMARY KEY,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

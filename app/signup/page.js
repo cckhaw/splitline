@@ -1,5 +1,6 @@
 "use client";
 
+import Turnstile from "@/components/Turnstile";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -40,6 +41,8 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -73,7 +76,7 @@ export default function SignupPage() {
       const res = await fetch("/api/auth/signup", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ name, email, password, confirmPassword, birthDate }),
+        body: JSON.stringify({ name, email, password, confirmPassword, birthDate, captchaToken }),
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't create that account.");
@@ -82,6 +85,7 @@ export default function SignupPage() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setCaptchaReset((n) => n + 1);
     }
   }
 
@@ -188,6 +192,7 @@ export default function SignupPage() {
           </div>
           <label>Confirm password</label>
           <input type="password" required minLength={12} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+          <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
           {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
           <button className="primary" type="submit" disabled={loading} style={{ marginTop: 18 }}>
             {loading ? "Creating account…" : "Sign up"}

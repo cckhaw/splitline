@@ -31,7 +31,14 @@ export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const { kind, format, payload } = await request.json();
+  // Reject oversized bodies before parsing/rendering a PNG or PDF.
+  const declared = Number(request.headers.get("content-length") || 0);
+  if (declared > 256 * 1024) return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
+  const text = await request.text();
+  if (text.length > 256 * 1024) return NextResponse.json({ error: "payload_too_large" }, { status: 413 });
+  let parsed;
+  try { parsed = JSON.parse(text); } catch { return NextResponse.json({ error: "invalid_json" }, { status: 400 }); }
+  const { kind, format, payload } = parsed || {};
   const buildContent = BUILDERS[kind];
   if (!buildContent) return NextResponse.json({ error: "invalid_kind" }, { status: 400 });
   if (format !== "pdf" && format !== "png") return NextResponse.json({ error: "invalid_format" }, { status: 400 });

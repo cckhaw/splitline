@@ -3,12 +3,12 @@ import crypto from "node:crypto";
 import { EncryptJWT } from "jose";
 import { authorizeUrl, platformCredentials } from "@/lib/strava";
 import { getSessionUser } from "@/lib/authGuard";
+import { deriveKey } from "@/lib/keys";
 
 export const runtime = "nodejs";
 
 function pendingKey() {
-  const s = process.env.SESSION_SECRET;
-  return new TextEncoder().encode(s.slice(0, 32).padEnd(32, "0"));
+  return deriveKey("strava-pending");
 }
 
 // POST so a "bring your own app" client secret never travels in a URL —

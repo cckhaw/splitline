@@ -1,3 +1,4 @@
+import { reserveAiGeneration } from "@/lib/aiBudget";
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getSessionUser } from "@/lib/authGuard";
@@ -60,7 +61,7 @@ export async function GET(request) {
   }
 
   const wantsGenerate = !cached || cached.input_hash !== inputHash;
-  const eligible = isRefreshEligible(tier, usage?.last_used_at);
+  const eligible = isRefreshEligible(tier, usage?.last_used_at) && (!wantsGenerate || await reserveAiGeneration(session.userId, FEATURE));
 
   if (wantsGenerate && eligible) {
     try {

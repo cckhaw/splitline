@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { getUserByEmail, setEmailVerified, friendlyDbErrorMessage } from "@/lib/db";
 import { checkVerificationCode } from "@/lib/verification";
-import { createSession, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
+import { createSession, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session";
+import { rateLimit, clientIp, idKey } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -18,6 +19,12 @@ const ERROR_MESSAGES = {
 export async function POST(request) {
   const { email, code } = await request.json().catch(() => ({}));
 
+  const limited = await rateLimit([
+    { key: `verify:ip:${clientIp(request)}`, limit: 30, windowSeconds: 60 * 60 },
+    { key: `verify:acct:${idKey(email)}`, limit: 20, windowSeconds: 60 * 60 },
+  ]);
+  if (limited) return limited;
+
   try {
     const user = await getUserByEmail(email || "");
     if (!user) return NextResponse.json({ error: "not_found", message: "No account with that email." }, { status: 404 });
@@ -32,9 +39,9 @@ export async function POST(request) {
 
     await setEmailVerified(user.id);
 
-    const token = await createSession(user.id);
+    const token = await createSession(user.id, user.session_version);
     const res = NextResponse.json({ ok: true });
-    res.cookies.set(SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: SESSION_MAX_AGE, path: "/" });
+    res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
     return res;
   } catch (e) {
     console.error("Email verification failed:", e);
