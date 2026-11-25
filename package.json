@@ -22,7 +22,7 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "satori": "^0.33.4",
-    "stripe": "^22.6.2",
+    "stripe": "^23.2.0",
     "zod": "^4.2.1"
   },
   "type": "module"
