@@ -2,13 +2,13 @@ import { NextResponse } from "next/server";
 import { jwtDecrypt } from "jose";
 import { exchangeCode, platformCredentials } from "@/lib/strava";
 import { getSessionUser } from "@/lib/authGuard";
+import { deriveKey } from "@/lib/keys";
 import { saveStravaConnection } from "@/lib/db";
 
 export const runtime = "nodejs";
 
 function pendingKey() {
-  const s = process.env.SESSION_SECRET;
-  return new TextEncoder().encode(s.slice(0, 32).padEnd(32, "0"));
+  return deriveKey("strava-pending");
 }
 
 // If the connect flow started on a different host than the one Strava

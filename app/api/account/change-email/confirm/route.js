@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
-import { updateUserEmail, friendlyDbErrorMessage } from "@/lib/db";
+import { updateUserEmail, bumpSessionVersion, friendlyDbErrorMessage } from "@/lib/db";
+import { SESSION_COOKIE, createSession, sessionCookieOptions } from "@/lib/session";
+import { rateLimit } from "@/lib/rateLimit";
 import { checkVerificationCode } from "@/lib/verification";
 
 export const runtime = "nodejs";
@@ -16,6 +18,9 @@ export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
+  const limited = await rateLimit([{ key: `chgemail-confirm:user:${session.userId}`, limit: 20, windowSeconds: 60 * 60 }]);
+  if (limited) return limited;
+
   const { code } = await request.json().catch(() => ({}));
 
   try {
@@ -28,7 +33,10 @@ export async function POST(request) {
     }
 
     await updateUserEmail(session.userId, result.newEmail);
-    return NextResponse.json({ ok: true, email: result.newEmail });
+    const version = await bumpSessionVersion(session.userId); // sign out other devices
+    const res = NextResponse.json({ ok: true, email: result.newEmail });
+    res.cookies.set(SESSION_COOKIE, await createSession(session.userId, version), sessionCookieOptions());
+    return res;
   } catch (e) {
     console.error("Failed to confirm email change:", e);
     return NextResponse.json({ error: "server_error", message: friendlyDbErrorMessage(e) }, { status: 500 });

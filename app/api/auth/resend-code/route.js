@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getUserByEmail, friendlyDbErrorMessage } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
+import { rateLimit, clientIp, idKey } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -8,6 +9,12 @@ export const runtime = "nodejs";
 // reissued via /api/account/change-email/request instead.
 export async function POST(request) {
   const { email } = await request.json().catch(() => ({}));
+
+  const limited = await rateLimit([
+    { key: `resend:ip:${clientIp(request)}`, limit: 10, windowSeconds: 60 * 60 },
+    { key: `resend:acct:${idKey(email)}`, limit: 5, windowSeconds: 60 * 60 },
+  ]);
+  if (limited) return limited;
 
   try {
     const user = await getUserByEmail(email || "");

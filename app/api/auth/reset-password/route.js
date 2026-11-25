@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import bcrypt from "bcryptjs";
-import { getUserByEmail, updateUserPassword, friendlyDbErrorMessage } from "@/lib/db";
+import { getUserByEmail, updateUserPassword, bumpSessionVersion, friendlyDbErrorMessage } from "@/lib/db";
 import { checkVerificationCode } from "@/lib/verification";
-import { isValidPassword, PASSWORD_REQUIREMENTS_TEXT } from "@/lib/password";
+import { isValidPassword, PASSWORD_REQUIREMENTS_TEXT, hashPassword } from "@/lib/password";
+import { rateLimit, clientIp, idKey } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -25,6 +25,12 @@ export async function POST(request) {
     return NextResponse.json({ error: "password_mismatch", message: "New passwords don't match." }, { status: 400 });
   }
 
+  const limited = await rateLimit([
+    { key: `reset:ip:${clientIp(request)}`, limit: 30, windowSeconds: 60 * 60 },
+    { key: `reset:acct:${idKey(email)}`, limit: 20, windowSeconds: 60 * 60 },
+  ]);
+  if (limited) return limited;
+
   try {
     const user = await getUserByEmail(email);
     // Same "incorrect code" response whether the address has no account
@@ -42,8 +48,9 @@ export async function POST(request) {
       );
     }
 
-    const hash = await bcrypt.hash(newPassword, 10);
+    const hash = await hashPassword(newPassword);
     await updateUserPassword(user.id, hash);
+    await bumpSessionVersion(user.id); // sign out every device that had the old password
     return NextResponse.json({ ok: true });
   } catch (e) {
     console.error("Failed to reset password:", e);

@@ -27,6 +27,7 @@ export default function AccountPage() {
   const [nameSaving, setNameSaving] = useState(false);
 
   const [newEmail, setNewEmail] = useState("");
+  const [emailPassword, setEmailPassword] = useState("");
   const [emailStep, setEmailStep] = useState("idle"); // idle | code
   const [emailCode, setEmailCode] = useState("");
   const [emailStatus, setEmailStatus] = useState("");
@@ -148,7 +149,7 @@ export default function AccountPage() {
       const res = await fetch("/api/account/change-email/request", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ newEmail }),
+        body: JSON.stringify({ newEmail, currentPassword: emailPassword }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.message);
@@ -177,6 +178,7 @@ export default function AccountPage() {
       setMe((m) => ({ ...m, email: data.email }));
       setEmailStep("idle");
       setNewEmail("");
+      setEmailPassword("");
       setEmailCode("");
       setEmailStatus("Email updated.");
     } catch (e) {
@@ -422,6 +424,8 @@ export default function AccountPage() {
           <form onSubmit={requestEmailChange}>
             <label>New email</label>
             <input type="email" required value={newEmail} onChange={(e) => setNewEmail(e.target.value)} />
+            <label>Current password <span className="hint">(leave blank if you only sign in with Google)</span></label>
+            <input type="password" autoComplete="current-password" value={emailPassword} onChange={(e) => setEmailPassword(e.target.value)} />
             {emailStatus && <div className={`status-line${emailWarn ? " warn" : ""}`}>{emailStatus}</div>}
             <button className="primary" type="submit" disabled={emailSaving} style={{ marginTop: 12 }}>
               {emailSaving ? "Sending code…" : "Send verification code"}
@@ -469,6 +473,19 @@ export default function AccountPage() {
             {pwSaving ? "Saving…" : "Update password"}
           </button>
         </form>
+        <div className="hint" style={{ marginTop: 16 }}>
+          Lost a device or think someone else has access?{" "}
+          <button
+            type="button"
+            style={{ display: "inline", width: "auto", padding: 0, background: "none", border: "none", textDecoration: "underline", cursor: "pointer", color: "inherit" }}
+            onClick={async () => {
+              await fetch("/api/account/logout-all", { method: "POST" });
+              window.location.href = "/login";
+            }}
+          >
+            Sign out everywhere
+          </button>
+        </div>
       </div>
 
       <div className="panel">

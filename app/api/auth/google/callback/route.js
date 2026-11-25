@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { exchangeCode, getUserInfo } from "@/lib/google";
-import { getUserByGoogleId, getUserByEmail, createUser, linkGoogleId, setEmailVerified } from "@/lib/db";
-import { createSession, SESSION_COOKIE, SESSION_MAX_AGE } from "@/lib/session";
+import { getUserByGoogleId, getUserByEmail, createUser, linkGoogleId, takeOverUnverifiedAccount } from "@/lib/db";
+import { createSession, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session";
 import { betaSignupTierGrant } from "@/lib/membership";
 
 export const runtime = "nodejs";
@@ -26,21 +26,33 @@ export async function GET(request) {
     const tokens = await exchangeCode(code, redirectUri);
     const profile = await getUserInfo(tokens.access_token);
     if (!profile.email) return fail("google_no_email");
+    // Never sign in or link by an email Google hasn't verified: anyone can
+    // attach someone else's address to a Google account without proving it.
+    if (profile.email_verified !== true) return fail("google_email_unverified");
 
     let user = await getUserByGoogleId(profile.sub);
     let isNewUser = false;
     if (!user) {
       const existing = await getUserByEmail(profile.email);
       if (existing) {
-        await linkGoogleId(existing.id, profile.sub);
-        if (!existing.email_verified && profile.email_verified) await setEmailVerified(existing.id);
+        if (existing.email_verified) {
+          await linkGoogleId(existing.id, profile.sub);
+        } else {
+          // The account was created (with someone's chosen password) but
+          // its email never verified. Google has now proven the real owner
+          // controls this address, so drop that password and every
+          // existing session before taking the account over — otherwise
+          // whoever pre-registered the email keeps access.
+          await takeOverUnverifiedAccount(existing.id, profile.sub);
+          existing.session_version = (existing.session_version || 0) + 1;
+        }
         user = existing;
       } else {
         // Google's basic profile scope doesn't include date of birth, so
         // the under-13 signup block can't be enforced here — new Google
         // accounts are instead nudged to add it on the account page.
         user = await createUser(profile.name || profile.email, profile.email, null, {
-          emailVerified: Boolean(profile.email_verified),
+          emailVerified: true,
           googleId: profile.sub,
           ...betaSignupTierGrant(),
         });
@@ -48,9 +60,9 @@ export async function GET(request) {
       }
     }
 
-    const token = await createSession(user.id);
+    const token = await createSession(user.id, user.session_version);
     const res = NextResponse.redirect(`${url.origin}${isNewUser ? "/account?prompt=birthdate" : "/app"}`);
-    res.cookies.set(SESSION_COOKIE, token, { httpOnly: true, secure: true, sameSite: "lax", maxAge: SESSION_MAX_AGE, path: "/" });
+    res.cookies.set(SESSION_COOKIE, token, sessionCookieOptions());
     res.cookies.delete("google_oauth_state");
     return res;
   } catch (e) {

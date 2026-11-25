@@ -1,5 +1,6 @@
 "use client";
 
+import Turnstile from "@/components/Turnstile";
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -10,6 +11,7 @@ const ERROR_MESSAGES = {
   google_not_configured: "Google sign-in isn't set up on this deployment yet.",
   google_access_denied: "Google sign-in was cancelled.",
   google_no_email: "That Google account has no email address to sign in with.",
+  google_email_unverified: "Google hasn't verified that email address, so we can't sign you in with it.",
   state_mismatch: "That sign-in attempt looked tampered with — try again.",
   google_auth_failed: "Google sign-in failed — try again.",
 };
@@ -18,6 +20,8 @@ export default function LoginPage() {
   const router = useRouter();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [needsVerification, setNeedsVerification] = useState(false);
@@ -50,7 +54,7 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ email, password, captchaToken }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -69,6 +73,7 @@ export default function LoginPage() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setCaptchaReset((n) => n + 1);
     }
   }
 
@@ -94,6 +99,7 @@ export default function LoginPage() {
           <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
           <label>Password</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+          <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
           {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
           {needsVerification && (
             <div className="hint">

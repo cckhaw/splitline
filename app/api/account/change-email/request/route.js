@@ -2,6 +2,9 @@ import { NextResponse } from "next/server";
 import { getSessionUser } from "@/lib/authGuard";
 import { getUserById, getUserByEmail, friendlyDbErrorMessage } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
+import { verifyPassword } from "@/lib/password";
+import { isFreshSession } from "@/lib/session";
+import { rateLimit } from "@/lib/rateLimit";
 
 export const runtime = "nodejs";
 
@@ -9,7 +12,10 @@ export async function POST(request) {
   const session = await getSessionUser(request);
   if (!session) return NextResponse.json({ error: "not_authenticated" }, { status: 401 });
 
-  const { newEmail } = await request.json().catch(() => ({}));
+  const limited = await rateLimit([{ key: `chgemail:user:${session.userId}`, limit: 8, windowSeconds: 60 * 60 }]);
+  if (limited) return limited;
+
+  const { newEmail, currentPassword } = await request.json().catch(() => ({}));
   if (!newEmail || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail)) {
     return NextResponse.json({ error: "invalid_email", message: "Enter a valid email address." }, { status: 400 });
   }
@@ -17,6 +23,22 @@ export async function POST(request) {
   try {
     const user = await getUserById(session.userId);
     const normalized = newEmail.toLowerCase().trim();
+
+    // Changing the email is an account-takeover primitive (it feeds
+    // "forgot password"), so a stolen session alone must not be enough.
+    const withHash = await getUserByEmail(user.email);
+    if (withHash.password_hash) {
+      const { ok } = await verifyPassword(currentPassword, withHash.password_hash);
+      if (!ok) {
+        return NextResponse.json({ error: "wrong_password", message: "Current password is incorrect." }, { status: 401 });
+      }
+    } else if (!isFreshSession(session)) {
+      return NextResponse.json(
+        { error: "reauth_required", message: "For your security, sign out and sign in again with Google, then change your email." },
+        { status: 401 }
+      );
+    }
+
     if (normalized === user.email) {
       return NextResponse.json({ error: "same_email", message: "That's already your email." }, { status: 400 });
     }
