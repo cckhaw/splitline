@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createUser, getUserByEmail, updateUserName, updateUserPassword, updateUserBirthDate, bumpSessionVersion, friendlyDbErrorMessage } from "@/lib/db";
+import { createUser, getUserByEmail, updateUserName, updateUserPassword, updateUserBirthDate, bumpSessionVersion, getActiveVerificationCode, friendlyDbErrorMessage } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
 import { ageFromBirthDate } from "@/lib/insights";
 import { betaSignupTierGrant } from "@/lib/membership";
@@ -53,6 +53,10 @@ export async function POST(request) {
   }
 
   try {
+    // Hash first, on every path, so a response for an already-registered
+    // email takes as long as one for a new email (no timing oracle).
+    const hash = await hashPassword(password);
+
     const existing = await getUserByEmail(email);
     if (existing && existing.email_verified) {
       // Same response as a fresh signup so this endpoint can't be used to
@@ -71,10 +75,17 @@ export async function POST(request) {
       return NextResponse.json({ ok: true, needsVerification: true, email: existing.email });
     }
 
-    const hash = await hashPassword(password);
     let user;
     if (existing) {
-      // Unverified account from a previous, abandoned signup attempt — pick it back up.
+      // An unverified account with a still-live signup code means someone
+      // (possibly the real owner, possibly not) has a pending attempt.
+      // Don't let a newer request overwrite its password or hijack the
+      // pending code; answer identically and leave it untouched. Once
+      // that code expires, an abandoned attempt can be picked back up.
+      const pending = await getActiveVerificationCode(existing.id, "signup_email");
+      if (pending && new Date(pending.expires_at) > new Date()) {
+        return NextResponse.json({ ok: true, needsVerification: true, email: existing.email });
+      }
       await updateUserName(existing.id, name.trim());
       await updateUserPassword(existing.id, hash);
       await updateUserBirthDate(existing.id, birthDate);

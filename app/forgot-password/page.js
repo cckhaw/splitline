@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import Turnstile from "@/components/Turnstile";
 import ThemeToggle from "@/components/ThemeToggle";
 import SiteFooter from "@/components/SiteFooter";
 import { PASSWORD_REQUIREMENTS_TEXT } from "@/lib/password";
@@ -33,6 +34,8 @@ export default function ForgotPasswordPage() {
   const [error, setError] = useState("");
   const [resent, setResent] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState("");
+  const [captchaReset, setCaptchaReset] = useState(0);
 
   async function handleRequestCode(e) {
     e.preventDefault();
@@ -42,7 +45,7 @@ export default function ForgotPasswordPage() {
       const res = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ email }),
+        body: JSON.stringify({ email, captchaToken }),
       });
       const data = await safeJson(res);
       if (!res.ok) throw new Error(data.message || "Couldn't send a reset code.");
@@ -51,17 +54,24 @@ export default function ForgotPasswordPage() {
       setError(e.message);
     } finally {
       setLoading(false);
+      setCaptchaReset((n) => n + 1);
     }
   }
 
   async function handleResend() {
     setError("");
     setResent(false);
-    await fetch("/api/auth/forgot-password", {
+    const res = await fetch("/api/auth/forgot-password", {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ email }),
+      body: JSON.stringify({ email, captchaToken }),
     });
+    setCaptchaReset((n) => n + 1);
+    if (!res.ok) {
+      const data = await safeJson(res);
+      setError(data.message || "Couldn't send a new code.");
+      return;
+    }
     setResent(true);
   }
 
@@ -105,6 +115,7 @@ export default function ForgotPasswordPage() {
           <form onSubmit={handleRequestCode}>
             <label>Email</label>
             <input type="email" required autoFocus value={email} onChange={(e) => setEmail(e.target.value)} />
+            <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
             {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
             <button className="primary" type="submit" disabled={loading} style={{ marginTop: 18 }}>
               {loading ? "Sending…" : "Send reset code"}
@@ -136,6 +147,7 @@ export default function ForgotPasswordPage() {
             <div className="hint" style={{ marginTop: 4 }}>{PASSWORD_REQUIREMENTS_TEXT}</div>
             <label>Confirm new password</label>
             <input type="password" required minLength={12} value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+            <Turnstile onToken={setCaptchaToken} resetKey={captchaReset} />
             {error && <div className="status-line warn" style={{ marginTop: 12 }}>{error}</div>}
             {resent && !error && <div className="status-line">Sent a new code.</div>}
             <button className="primary" type="submit" disabled={loading || code.length !== 6} style={{ marginTop: 18 }}>

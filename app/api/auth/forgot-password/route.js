@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getUserByEmail, friendlyDbErrorMessage } from "@/lib/db";
 import { issueVerificationCode } from "@/lib/verification";
 import { rateLimit, clientIp, idKey } from "@/lib/rateLimit";
+import { requireTurnstile } from "@/lib/turnstile";
 
 export const runtime = "nodejs";
 
@@ -9,7 +10,7 @@ export const runtime = "nodejs";
 // account — otherwise this endpoint would let anyone probe which emails
 // are registered with Splitline.
 export async function POST(request) {
-  const { email } = await request.json().catch(() => ({}));
+  const { email, captchaToken } = await request.json().catch(() => ({}));
   if (!email) return NextResponse.json({ error: "missing_email", message: "Enter your email address." }, { status: 400 });
 
   const limited = await rateLimit([
@@ -17,6 +18,8 @@ export async function POST(request) {
     { key: `forgot:acct:${idKey(email)}`, limit: 5, windowSeconds: 60 * 60 },
   ]);
   if (limited) return limited;
+  const captcha = await requireTurnstile(request, captchaToken);
+  if (captcha) return captcha;
 
   try {
     const user = await getUserByEmail(email);
