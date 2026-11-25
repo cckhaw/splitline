@@ -1,3 +1,4 @@
+import { reserveAiGeneration } from "@/lib/aiBudget";
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getSessionUser } from "@/lib/authGuard";
@@ -68,7 +69,7 @@ export async function GET(request) {
     return NextResponse.json({ goal: eventInfo, tier, plan: cached.payload, generatedAt: cached.generated_at, cached: true, locked: false });
   }
 
-  const eligible = isRefreshEligible(tier, usage?.last_used_at);
+  const eligible = isRefreshEligible(tier, usage?.last_used_at) && (await reserveAiGeneration(session.userId, FEATURE));
   if (eligible) {
     // Reached only when a real generation attempt is about to happen —
     // either the goal/data changed (a fresh plan) or the user explicitly

@@ -1,3 +1,4 @@
+import { reserveAiGeneration } from "@/lib/aiBudget";
 import { NextResponse } from "next/server";
 import crypto from "node:crypto";
 import { getSessionUser } from "@/lib/authGuard";
@@ -95,7 +96,7 @@ export async function GET(request) {
   } catch (e) {
     console.error("Failed to read training-plan AI usage:", e);
   }
-  if (!isRefreshEligible(tier, usage?.last_used_at)) {
+  if (!isRefreshEligible(tier, usage?.last_used_at) || !(await reserveAiGeneration(session.userId, "training_plan_deviation"))) {
     return NextResponse.json({ active: false, reason: "rate_limited" });
   }
 
@@ -176,7 +177,7 @@ export async function POST(request) {
   } catch (e) {
     console.error("Failed to read training-plan AI usage:", e);
   }
-  if (!isRefreshEligible(tier, usage?.last_used_at)) {
+  if (!isRefreshEligible(tier, usage?.last_used_at) || !(await reserveAiGeneration(session.userId, "training_plan_deviation"))) {
     return NextResponse.json(
       { error: "locked", message: "You've used this tier's plan refresh for now.", nextEligibleAt: nextEligibleDate(tier, usage?.last_used_at) },
       { status: 429 }

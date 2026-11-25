@@ -311,3 +311,11 @@ CREATE TABLE IF NOT EXISTS rate_limits (
   count INTEGER NOT NULL DEFAULT 1,
   PRIMARY KEY (key, window_start)
 );
+
+-- Stripe webhook idempotency: an event id is recorded only after it was
+-- handled successfully, so retries of failed events are processed and
+-- retries of handled ones are skipped.
+CREATE TABLE IF NOT EXISTS processed_stripe_events (
+  event_id TEXT PRIMARY KEY,
+  processed_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
